@@ -1,7 +1,10 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import Layout from './components/Layout'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { LoginPage } from './components/LoginPage'
+import { LoadingSkeleton } from './components/LoadingSkeleton'
 import { LanguageProvider } from './lib/language'
 
 const Dashboard = lazy(() => import('./components/Dashboard'))
@@ -15,20 +18,14 @@ const EvolutionTimeline = lazy(() => import('./components/EvolutionTimeline'))
 const ComputerAgent = lazy(() => import('./components/ComputerAgent'))
 const NLCreator = lazy(() => import('./components/NLCreator'))
 
-function Loading() {
-  return (
-    <div className="flex items-center justify-center h-full py-20">
-      <div className="text-gray-500 animate-pulse">加载中...</div>
-    </div>
-  )
-}
+function Loading() { return <LoadingSkeleton lines={4} />; }
 
 function App() {
   return (
     <LanguageProvider>
       <BrowserRouter>
         <Toaster richColors position="bottom-right" />
-        <Layout>
+        <ErrorBoundary><Layout>
           <Suspense fallback={<Loading />}>
             <Routes>
               <Route path="/" element={<Navigate to="/tasks" replace />} />
@@ -47,10 +44,11 @@ function App() {
               <Route path="*" element={<Navigate to="/tasks" replace />} />
             </Routes>
           </Suspense>
-        </Layout>
+        </Layout></ErrorBoundary>
       </BrowserRouter>
     </LanguageProvider>
   )
 }
 
 export default App
+

@@ -1,8 +1,9 @@
 /**
- * P1.2: Unified Authentication Middleware
+ * 🔒 Fixed: JWT auth now verifies signature instead of blindly decoding
  */
 
 import { Request, Response, NextFunction } from "express";
+import * as crypto from "node:crypto";
 
 export interface AuthConfig {
   jwtSecret?: string;
@@ -21,6 +22,37 @@ export interface AuthenticatedRequest extends Request {
   roles?: string[];
 }
 
+function verifyJWT(token: string, secret: string): Record<string, any> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+
+    // Verify signature using HMAC-SHA256
+    const header = parts[0];
+    const payload = parts[1];
+    const signature = parts[2];
+
+    const expectedSig = crypto
+      .createHmac("sha256", secret)
+      .update(`${header}.${payload}`)
+      .digest("base64url");
+
+    // Constant-time comparison to prevent timing attacks
+    if (signature.length !== expectedSig.length) return null;
+    let match = 0;
+    for (let i = 0; i < signature.length; i++) {
+      match |= signature.charCodeAt(i) ^ expectedSig.charCodeAt(i);
+    }
+    if (match !== 0) return null;
+
+    // Decode payload
+    const decoded = JSON.parse(Buffer.from(payload, "base64url").toString());
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
 export function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
   if (!config.enabled) { next(); return; }
 
@@ -32,18 +64,22 @@ export function authMiddleware(req: AuthenticatedRequest, res: Response, next: N
 
   if (authHeader.startsWith("Bearer ")) {
     const token = authHeader.slice(7);
+
+    // API key check
     if (config.apiKeys.includes(token)) {
       req.userId = "api-user";
       req.roles = ["admin"];
       next(); return;
     }
+
+    // JWT verification (signature-verified, not just base64-decoded)
     if (config.jwtSecret) {
-      try {
-        const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString());
+      const payload = verifyJWT(token, config.jwtSecret);
+      if (payload) {
         req.userId = payload.sub || payload.userId;
         req.roles = payload.roles || ["user"];
         next(); return;
-      } catch { /* not a valid JWT */ }
+      }
     }
   }
 
@@ -57,13 +93,3 @@ export function authMiddleware(req: AuthenticatedRequest, res: Response, next: N
   res.status(401).json({ error: "Invalid or expired authentication" });
 }
 
-export function requireRole(...roles: string[]) {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
-    if (!config.enabled) { next(); return; }
-    if (!req.roles || !roles.some((r) => req.roles!.includes(r))) {
-      res.status(403).json({ error: "Insufficient permissions" });
-      return;
-    }
-    next();
-  };
-}

@@ -28,10 +28,10 @@ export function AgentDashboard() {
 
   async function fetchSkills() {
     try {
-      const resp = await fetch("/api/skills");
+      const resp = await fetch("/skills");
       const data = await resp.json();
       setSkills(data.skills || []);
-    } catch { /* ignore */ }
+    } catch (e) { console.error('Failed to fetch skills:', e); }
   }
 
   return (
@@ -80,3 +80,5 @@ export function AgentDashboard() {
     </div>
   );
 }
+
+

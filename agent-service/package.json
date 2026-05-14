@@ -23,6 +23,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21"
+    "@types/express": "^4.17.21",
+    "vitest": "^4.1.6"
   }
 }
