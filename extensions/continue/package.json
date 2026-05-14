@@ -1,0 +1,33 @@
+{
+  "name": "memflow-continue",
+  "version": "1.0.0",
+  "description": "Continue integration for MemFlow",
+  "main": "index.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@continue/custom-plugin": "^0.1.0"
+  },
+  "config": {
+    "memflow": {
+      "apiUrl": "http://localhost:3000",
+      "apiKey": "${MEMFLOW_API_KEY}"
+    }
+  },
+  "hooks": {
+    "onAddMessage": [
+      {
+        "match": ["create workflow", "make workflow", "workflow"],
+        "prompt": "Would you like me to create a MemFlow workflow for this task?"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "name": "Execute Workflow",
+      "description": "Execute a MemFlow workflow",
+      "args": [{ "name": "workflow_id", "type": "string", "required": true }]
+    }
+  ]
+}

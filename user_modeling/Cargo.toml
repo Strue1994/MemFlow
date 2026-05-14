@@ -1,0 +1,16 @@
+[package]
+name = "user_modeling"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = "0.4"
+uuid = { version = "1", features = ["v4"] }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+
+[lib]
+name = "user_modeling"
+path = "src/lib.rs"

@@ -1,0 +1,52 @@
+groups:
+  - name: memflow
+    rules:
+      - alert: WorkflowFailureRateHigh
+        expr: |
+          sum(rate(memflow_workflow_executions_total{status="failed"}[5m])) 
+          / sum(rate(memflow_workflow_executions_total[5m])) 
+          > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Workflow failure rate is above 10%"
+          
+      - alert: LearningEngineStalled
+        expr: |
+          time() - memflow_learning_last_run_timestamp 
+          > 3600 * 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Learning engine hasn't run for 2 hours"
+          
+      - alert: MemoryHubSlowQuery
+        expr: |
+          histogram_quantile(0.95, memflow_memory_search_duration_seconds_bucket) 
+          > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Memory search p95 latency > 1s"
+          
+      - alert: HighConcurrencyUsage
+        expr: |
+          memflow_active_workflows / memflow_max_concurrent 
+          > 0.9
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Concurrent workflow usage > 90%"
+          
+      - alert: DatabaseConnectionFailures
+        expr: |
+          increase(memflow_db_connection_errors_total[5m]) > 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Multiple database connection failures"

@@ -1,0 +1,25 @@
+{{- if .Values.executor.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "memflow.fullname" . }}-executor-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.executor.persistence.size }}
+{{- end }}
+{{- if .Values.memoryHub.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "memflow.fullname" . }}-memory-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.memoryHub.persistence.size }}
+{{- end }}

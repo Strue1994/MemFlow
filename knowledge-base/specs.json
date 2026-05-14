@@ -1,0 +1,246 @@
+{
+  "version": "1.0",
+  "nodes": {
+    "n8n-nodes-base.httpRequest": {
+      "name": "HTTP Request",
+      "description": "Make HTTP requests to external services",
+      "category": "Network",
+      "parameters": {
+        "url": {
+          "type": "string",
+          "required": true,
+          "example": "https://api.example.com/data"
+        },
+        "method": {
+          "type": "string",
+          "required": false,
+          "default": "GET",
+          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+        },
+        "authentication": {
+          "type": "object",
+          "required": false,
+          "properties": {
+            "type": { "enum": ["none", "basic", "bearer", "custom", "oAuth2"] }
+          }
+        },
+        "headers": {
+          "type": "object",
+          "required": false
+        },
+        "body": {
+          "type": "string",
+          "required": false,
+          "description": "Request body (JSON, XML, etc.)"
+        },
+        "queryParameters": {
+          "type": "object",
+          "required": false
+        },
+        "timeout": {
+          "type": "number",
+          "required": false,
+          "default": 30000,
+          "min": 1000,
+          "max": 60000,
+          "description": "Request timeout in milliseconds"
+        }
+      },
+      "expression_support": ["url", "headers", "body", "queryParameters"]
+    },
+    "n8n-nodes-base.scheduleTrigger": {
+      "name": "Schedule Trigger",
+      "description": "Trigger workflow on a schedule",
+      "category": "Trigger",
+      "parameters": {
+        "rule": {
+          "type": "object",
+          "required": true,
+          "properties": {
+            "interval": {
+              "type": "object",
+              "properties": {
+                "field": { "enum": ["minutes", "hours", "days"] },
+                "value": { "type": "number", "min": 1 }
+              }
+            }
+          }
+        },
+        "timezone": {
+          "type": "string",
+          "required": false,
+          "default": "UTC"
+        }
+      }
+    },
+    "n8n-nodes-base.webhook": {
+      "name": "Webhook",
+      "description": "Receive HTTP webhooks",
+      "category": "Trigger",
+      "parameters": {
+        "httpMethod": {
+          "type": "string",
+          "required": true,
+          "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"]
+        },
+        "path": {
+          "type": "string",
+          "required": true,
+          "description": "Webhook path (e.g., 'webhook' becomes '/webhook')"
+        },
+        "responseMode": {
+          "type": "string",
+          "required": false,
+          "default": "onReceived",
+          "enum": ["onReceived", "afterResponse", "lastNode"]
+        },
+        "responseData": {
+          "type": "string",
+          "required": false,
+          "default": "allEntries"
+        }
+      }
+    },
+    "n8n-nodes-base.slack": {
+      "name": "Slack",
+      "description": "Send messages to Slack",
+      "category": "Communication",
+      "parameters": {
+        "operation": {
+          "type": "string",
+          "required": true,
+          "enum": ["sendMessage", "sendChannelMessage"]
+        },
+        "channel": {
+          "type": "string",
+          "required": true,
+          "description": "Channel name starting with #"
+        },
+        "text": {
+          "type": "string",
+          "required": true,
+          "description": "Message text"
+        }
+      }
+    },
+    "n8n-nodes-base.code": {
+      "name": "Code",
+      "description": "Execute JavaScript code",
+      "category": "Data Transformation",
+      "parameters": {
+        "jsCode": {
+          "type": "string",
+          "required": true,
+          "description": "JavaScript code to execute",
+          "maxLength": 50000
+        },
+        "mode": {
+          "type": "string",
+          "required": false,
+          "default": "inline"
+        }
+      },
+      "constraints": {
+        "execution_timeout": 5000,
+        "memory_limit": "128MB"
+      }
+    },
+    "n8n-nodes-base.set": {
+      "name": "Set",
+      "description": "Set node values",
+      "category": "Data Transformation",
+      "parameters": {
+        "mode": {
+          "type": "string",
+          "required": false,
+          "default": "manual"
+        },
+        "assignments": {
+          "type": "object",
+          "required": true
+        },
+        "includeOtherFields": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "n8n-nodes-base.if": {
+      "name": "IF",
+      "description": "Conditional branching",
+      "category": "Logic",
+      "parameters": {
+        "conditions": {
+          "type": "object",
+          "required": true
+        },
+        "dataType": {
+          "type": "string",
+          "required": false,
+          "default": "string"
+        }
+      }
+    },
+    "n8n-nodes-base.splitInBatches": {
+      "name": "Split In Batches",
+      "description": "Process items in batches",
+      "category": "Logic",
+      "parameters": {
+        "batchSize": {
+          "type": "number",
+          "required": false,
+          "default": 1,
+          "min": 1,
+          "max": 1000
+        },
+        "overlap": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "n8n-nodes-base.googleSheets": {
+      "name": "Google Sheets",
+      "description": "Read/Write Google Sheets",
+      "category": "Data Storage",
+      "parameters": {
+        "operation": {
+          "type": "string",
+          "required": true,
+          "enum": ["read", "write", "append", "update", "clear"]
+        },
+        "sheetName": {
+          "type": "string",
+          "required": true
+        }
+      }
+    }
+  },
+  "connection_rules": {
+    "required_response": "每个 Webhook 必须有对应的 Respond to Webhook 节点",
+    "branch_completeness": "IF/Switch 节点的所有分支必须连接",
+    "error_handling": "错误工作流应连接到 Catch 节点"
+  },
+  "expression_syntax": {
+    "data_location": {
+      "current_node": "{{ $json.field }}",
+      "previous_node": "{{ $('NodeName').item.json.field }}",
+      "binary_data": "{{ $binary.data }}",
+      "all_items": "{{ $json.items.* }}"
+    },
+    "common_functions": {
+      "date": "{{ $now.format('YYYY-MM-DD') }}",
+      "math": "{{ $json.price * $json.quantity }}",
+      "string": "{{ $json.name.toUpperCase() }}",
+      "length": "{{ $json.text.length }}",
+      "json_parse": "{{ JSON.parse($json.data) }}"
+    },
+    "common_mistakes": [
+      "Missing closing braces: {{ field }",
+      "Reference to non-existent fields: {{ $json.nonexistent }}",
+      "Incorrect JSONPath: {{ $json.items[0].name }}",
+      "Using {{ }} inside another expression",
+      "Undefined variable in expression"
+    ]
+  }
+}

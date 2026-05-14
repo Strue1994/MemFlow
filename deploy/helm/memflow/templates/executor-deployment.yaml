@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "memflow.fullname" . }}-executor
+  labels:
+    {{- include "memflow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: executor
+spec:
+  replicas: {{ .Values.executor.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "memflow.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: executor
+  template:
+    metadata:
+      labels:
+        {{- include "memflow.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: executor
+    spec:
+      containers:
+        - name: executor
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.executor.image.repository }}:{{ .Values.executor.image.tag }}"
+          imagePullPolicy: {{ .Values.executor.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.executor.service.port }}
+              name: http
+          env:
+            - name: RUST_LOG
+              value: {{ .Values.executor.env.RUST_LOG }}
+            - name: EXECUTOR_PORT
+              value: {{ .Values.executor.env.EXECUTOR_PORT }}
+            - name: EXECUTOR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "memflow.fullname" . }}-secrets
+                  key: executor-api-key
+                  optional: true
+          resources: {{ toYaml .Values.executor.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.executor.service.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 15

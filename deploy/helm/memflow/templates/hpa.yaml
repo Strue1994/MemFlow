@@ -1,0 +1,41 @@
+{{- if .Values.executor.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "memflow.fullname" . }}-executor
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "memflow.fullname" . }}-executor
+  minReplicas: {{ .Values.executor.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.executor.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.executor.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- if .Values.agentService.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "memflow.fullname" . }}-agent-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "memflow.fullname" . }}-agent-service
+  minReplicas: {{ .Values.agentService.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.agentService.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.agentService.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}

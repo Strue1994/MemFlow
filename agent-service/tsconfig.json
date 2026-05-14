@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "module": "commonjs",
+    "target": "es2020",
+    "types": ["node"],
+    "sourceMap": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*"],
+  "exclude": [
+    "src/audit.ts",
+    "src/business_metrics.ts",
+    "src/llm_router.ts",
+    "src/marketplace.ts",
+    "src/rate_limit.ts",
+    "src/alert_channels.ts"
+  ]
+}

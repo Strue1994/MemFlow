@@ -1,0 +1,93 @@
+version: "3.9"
+
+services:
+  executor:
+    build:
+      context: .
+      dockerfile: Dockerfile.executor
+    ports:
+      - "8082:8082"
+    environment:
+      - RUST_LOG=info
+      - EXECUTOR_PORT=8082
+    volumes:
+      - memflow_data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  memory-hub:
+    build:
+      context: .
+      dockerfile: Dockerfile.executor
+      args:
+        - PACKAGE=memory-hub
+    ports:
+      - "8081:8081"
+    environment:
+      - MEMORY_HUB_PORT=8081
+      - EMBEDDING_ENGINE=local
+    volumes:
+      - memflow_memory:/app/data
+
+  agent-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    ports:
+      - "3300:3300"
+    environment:
+      - PORT=3300
+      - EXECUTOR_URL=http://executor:8082
+      - MEMORY_HUB_URL=http://memory-hub:8081
+      - EXECUTOR_API_KEY=memflow-prod-key
+    depends_on:
+      executor:
+        condition: service_healthy
+      memory-hub:
+        condition: service_started
+
+  web-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.web-ui
+    ports:
+      - "5273:80"
+    environment:
+      - MEMFLOW_WEB_PORT=5273
+      - VITE_API_URL=http://agent-service:3300
+    depends_on:
+      - agent-service
+
+  learning-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.executor
+      args:
+        - PACKAGE=learning-engine
+    ports:
+      - "8083:8083"
+    environment:
+      - LEARNING_ENGINE_PORT=8083
+    volumes:
+      - memflow_data:/app/data
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.executor
+      args:
+        - PACKAGE=gateway
+    ports:
+      - "8084:8084"
+    environment:
+      - GATEWAY_PORT=8084
+      - AGENT_SERVICE_URL=http://agent-service:3300
+    depends_on:
+      - agent-service
+
+volumes:
+  memflow_data:
+  memflow_memory:

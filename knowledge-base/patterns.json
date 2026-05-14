@@ -1,0 +1,123 @@
+{
+  "version": "1.0",
+  "patterns": [
+    {
+      "id": "P001",
+      "name": "定时抓取 RSS 推送飞书",
+      "category": "定时任务",
+      "description": "定期抓取 RSS 源内容并推送到飞书机器人",
+      "triggers": ["Schedule Trigger"],
+      "nodes": ["RSS Feed Read", "HTTP Request (飞书 Webhook)"],
+      "required_credentials": ["feishu_webhook_url"],
+      "use_cases": ["内容聚合推送", "资讯监控"],
+      "complexity": "low"
+    },
+    {
+      "id": "P002",
+      "name": "Webhook 接收与处理",
+      "category": "Webhook",
+      "description": "接收外部 Webhook 并处理数据",
+      "triggers": ["Webhook Trigger"],
+      "nodes": ["Webhook", "Transform", "Respond to Webhook"],
+      "use_cases": ["支付回调", "外部系统集成"],
+      "complexity": "low"
+    },
+    {
+      "id": "P003",
+      "name": "定时数据库同步",
+      "category": "定时任务",
+      "description": "定期从外部 API 同步数据到数据库",
+      "triggers": ["Schedule Trigger"],
+      "nodes": ["HTTP Request", "Code (transform)", "DB Insert/Update"],
+      "required_credentials": ["database", "api_key"],
+      "use_cases": ["数据同步", "ETL"],
+      "complexity": "medium"
+    },
+    {
+      "id": "P004",
+      "name": "AI Agent 对话",
+      "category": "AI",
+      "description": "基于 LLM 的对话式 AI Agent",
+      "triggers": ["Webhook Trigger"],
+      "nodes": ["Webhook", "AI Agent", "Respond to Webhook"],
+      "required_credentials": ["openai_api_key"],
+      "use_cases": ["智能客服", "问答系统"],
+      "complexity": "medium"
+    },
+    {
+      "id": "P005",
+      "name": "表单收集与处理",
+      "category": "表单",
+      "description": "用户表单提交触发工作流",
+      "triggers": ["Form Trigger"],
+      "nodes": ["Form Trigger", "Code (validate)", "Email (confirm)", "DB Insert"],
+      "use_cases": ["用户注册", "问卷收集", "反馈提交"],
+      "complexity": "low"
+    },
+    {
+      "id": "P006",
+      "name": "批量处理与分页",
+      "category": "批处理",
+      "description": "批量处理大量数据记录",
+      "triggers": ["Schedule Trigger"],
+      "nodes": ["HTTP Request", "Split In Batches", "Loop", "Process"],
+      "use_cases": ["批量发送", "批量更新"],
+      "complexity": "medium"
+    },
+    {
+      "id": "P007",
+      "name": "条件分支处理",
+      "category": "逻辑",
+      "description": "根据条件执行不同分支",
+      "triggers": ["Webhook Trigger"],
+      "nodes": ["Webhook", "IF", "Branch A", "Branch B"],
+      "use_cases": ["状态路由", "错误分类"],
+      "complexity": "low"
+    },
+    {
+      "id": "P008",
+      "name": "错误重试机制",
+      "category": "错误处理",
+      "description": "失败后自动重试",
+      "triggers": ["Schedule Trigger"],
+      "nodes": ["Try", "Action", "Catch", "Retry"],
+      "use_cases": ["可靠性保证"],
+      "complexity": "medium"
+    },
+    {
+      "id": "ai-agent-workflow",
+      "name": "AI Agent Workflow Pattern",
+      "description": "Build AI agents with tool access, memory, and reasoning capabilities",
+      "use_cases": ["Chatbot with tool access", "AI assistant with database access", "Automated decision making system"],
+      "structure": "Trigger → AI Agent (Model + Tools + Memory) → Output",
+      "key_components": [
+        { "name": "Trigger", "options": ["Webhook", "Manual", "Schedule"] },
+        { "name": "AI Agent", "config": { "agent": "conversationalAgent | openAIFunctionsAgent" } },
+        { "name": "Language Model", "providers": ["OpenAI", "Anthropic", "Google", "Ollama"] },
+        { "name": "Tools", "description": "Any n8n node can be a tool via ai_tool port" },
+        { "name": "Memory", "types": ["Buffer Memory", "Window Buffer Memory", "Summary Memory"] }
+      ]
+    },
+    {
+      "id": "database-operations",
+      "name": "Database Operations Pattern",
+      "description": "Database query, insert, update, and transaction patterns",
+      "use_cases": ["Data synchronization between services", "CRM data manipulation", "Reporting and analytics pipelines"],
+      "key_components": ["Database node (PostgreSQL, MySQL, MongoDB)", "Transform node", "Error handling"]
+    },
+    {
+      "id": "http-api-integration",
+      "name": "HTTP API Integration Pattern",
+      "description": "Call external APIs with authentication, pagination, error handling",
+      "use_cases": ["Third-party service integration", "REST API data fetching", "OAuth authenticated requests"],
+      "key_considerations": ["Authentication (API Key, OAuth, Bearer)", "Pagination", "Rate limiting", "Response transformation"]
+    },
+    {
+      "id": "orchestration-patterns",
+      "name": "Orchestration Patterns",
+      "description": "Complex workflow orchestration with parallel execution, loops, and error handling",
+      "use_cases": ["Multi-step data processing", "Parallel task execution", "Conditional branching"],
+      "patterns": ["Sequential execution", "Parallel execution (split into batches)", "Loop over items (for each)", "Switch/If conditions"]
+    }
+  ]
+}

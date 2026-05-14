@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "memflow.fullname" . }}-learning-engine
+  labels:
+    {{- include "memflow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: learning-engine
+spec:
+  replicas: {{ .Values.learningEngine.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "memflow.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: learning-engine
+  template:
+    metadata:
+      labels:
+        {{- include "memflow.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: learning-engine
+    spec:
+      containers:
+        - name: learning-engine
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.learningEngine.image.repository }}:{{ .Values.learningEngine.image.tag }}"
+          ports:
+            - containerPort: {{ .Values.learningEngine.service.port }}
+          resources: {{ toYaml .Values.learningEngine.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "memflow.fullname" . }}-learning-engine
+  labels:
+    {{- include "memflow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: learning-engine
+spec:
+  ports:
+    - port: {{ .Values.learningEngine.service.port }}
+      targetPort: {{ .Values.learningEngine.service.port }}
+  selector:
+    {{- include "memflow.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: learning-engine

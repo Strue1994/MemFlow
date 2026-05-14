@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "memflow.fullname" . }}-memory-hub
+  labels:
+    {{- include "memflow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: memory-hub
+spec:
+  replicas: {{ .Values.memoryHub.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "memflow.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: memory-hub
+  template:
+    metadata:
+      labels:
+        {{- include "memflow.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: memory-hub
+    spec:
+      containers:
+        - name: memory-hub
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.memoryHub.image.repository }}:{{ .Values.memoryHub.image.tag }}"
+          ports:
+            - containerPort: {{ .Values.memoryHub.service.port }}
+          env:
+            - name: MEMORY_HUB_PORT
+              value: {{ .Values.memoryHub.env.MEMORY_HUB_PORT }}
+            - name: EMBEDDING_ENGINE
+              value: {{ .Values.memoryHub.env.EMBEDDING_ENGINE }}
+          resources: {{ toYaml .Values.memoryHub.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "memflow.fullname" . }}-memory-hub
+  labels:
+    {{- include "memflow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: memory-hub
+spec:
+  ports:
+    - port: {{ .Values.memoryHub.service.port }}
+      targetPort: {{ .Values.memoryHub.service.port }}
+  selector:
+    {{- include "memflow.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: memory-hub

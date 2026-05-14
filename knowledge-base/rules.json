@@ -1,0 +1,211 @@
+{
+  "version": "1.0",
+  "description": "n8n workflow validation rules",
+  "rules": [
+    {
+      "id": "R001",
+      "category": "structure",
+      "severity": "error",
+      "description": "工作流必须至少有一个触发器节点",
+      "check": "nodes.some(n => n.type.includes('Trigger'))",
+      "fix": "添加 Schedule Trigger 或 Webhook Trigger 节点"
+    },
+    {
+      "id": "R002",
+      "category": "http",
+      "severity": "warning",
+      "description": "HTTP Request 节点未设置超时时间，建议设置",
+      "check": "node.parameters.timeout === undefined",
+      "fix": "设置 timeout 为 30000 (30秒)"
+    },
+    {
+      "id": "R003",
+      "category": "expression",
+      "severity": "error",
+      "description": "表达式语法错误：未闭合的 {{ }}",
+      "check": "/(\\{\\{[^{}]*$)/.test(expression)",
+      "fix": "确保表达式正确闭合"
+    },
+    {
+      "id": "R004",
+      "category": "connection",
+      "severity": "error",
+      "description": "每个 Webhook 节点必须有对应的 Respond to Webhook 节点",
+      "check": "webhook_exists && !respond_exists",
+      "fix": "在 Webhook 后添加 Respond to Webhook 节点"
+    },
+    {
+      "id": "R005",
+      "category": "http",
+      "severity": "error",
+      "description": "HTTP Request 节点不能同时设置 body 和 form-data",
+      "check": "has_body && has_form_data",
+      "fix": "移除 body 或 form-data 中的一个"
+    },
+    {
+      "id": "R006",
+      "category": "structure",
+      "severity": "warning",
+      "description": "IF 节点的两个分支必须都有后续节点",
+      "check": "if_node.both_branches_connected",
+      "fix": "连接或删除空分支"
+    },
+    {
+      "id": "R007",
+      "category": "slack",
+      "severity": "error",
+      "description": "Slack 节点缺少必需的 channel 参数",
+      "check": "slack_node.channel === undefined",
+      "fix": "添加 channel 参数 (如 #general)"
+    },
+    {
+      "id": "R008",
+      "category": "http",
+      "severity": "error",
+      "description": "HTTP Request 节点缺少必需的 url 参数",
+      "check": "http_node.url === undefined",
+      "fix": "添加 url 参数"
+    },
+    {
+      "id": "R009",
+      "category": "expression",
+      "severity": "warning",
+      "description": "引用不存在的节点字段",
+      "check": "$json.references_nonexistent_field",
+      "fix": "检查字段名是否正确"
+    },
+    {
+      "id": "R010",
+      "category": "structure",
+      "severity": "error",
+      "description": "工作流节点数量为 0",
+      "check": "nodes.length === 0",
+      "fix": "添加至少一个节点"
+    },
+    {
+      "id": "R011",
+      "category": "logic",
+      "severity": "warning",
+      "description": "Split In Batches 节点 batch size 过大可能影响性能",
+      "check": "batch_size > 1000",
+      "fix": "将 batch_size 调整为 100-500"
+    },
+    {
+      "id": "R012",
+      "category": "data",
+      "severity": "warning",
+      "description": "Set 节点设置了过多变量",
+      "check": "set_node.variables.length > 20",
+      "fix": "考虑拆分为多个 Set 节点"
+    },
+    {
+      "id": "R013",
+      "category": "http",
+      "severity": "warning",
+      "description": "HTTP Request 使用了不推荐的方法进行身份验证",
+      "check": "uses_basic_auth_over_https === false && uses_oauth === false",
+      "fix": "推荐使用 OAuth2 或 API Key 认证"
+    },
+    {
+      "id": "R014",
+      "category": "schedule",
+      "severity": "warning",
+      "description": "Schedule Trigger 频率过高，可能影响性能",
+      "check": "interval_minutes < 5",
+      "fix": "将触发间隔调整为 5 分钟以上"
+    },
+    {
+      "id": "R015",
+      "category": "error_handling",
+      "severity": "warning",
+      "description": "工作流缺少错误处理节点",
+      "check": "has_error_workflow === false",
+      "fix": "添加 Error Workflow 或 Try/Catch 节点"
+    },
+    {
+      "id": "R016",
+      "category": "expression",
+      "severity": "error",
+      "description": "表达式中使用了不支持的函数",
+      "check": "unsupported_function_in_expression",
+      "fix": "查阅 n8n 表达式文档使用支持的函数"
+    },
+    {
+      "id": "R017",
+      "category": "google_sheets",
+      "severity": "error",
+      "description": "Google Sheets 节点缺少 spreadsheetId",
+      "check": "sheets_node.spreadsheetId === undefined",
+      "fix": "添加 spreadsheetId 参数"
+    },
+    {
+      "id": "R018",
+      "category": "telegram",
+      "severity": "error",
+      "description": "Telegram 节点缺少 chat_id",
+      "check": "telegram_node.chat_id === undefined",
+      "fix": "添加 chat_id 参数"
+    },
+    {
+      "id": "R019",
+      "category": "database",
+      "severity": "error",
+      "description": "数据库查询节点缺少 SQL 语句",
+      "check": "db_node.query === undefined",
+      "fix": "添加 query 参数"
+    },
+    {
+      "id": "R020",
+      "category": "data",
+      "severity": "warning",
+      "description": "Code 节点使用了同步阻塞操作",
+      "check": "code_node.uses_sync_file_io",
+      "fix": "使用异步操作或移到 Code 节点外执行"
+    }
+  ],
+  "node_specific_rules": {
+    "n8n-nodes-base.slack": {
+      "post_message": {
+        "required": ["channel", "text"],
+        "validation": {
+          "channel": "必须以 # 开头或是有效的 channel ID"
+        }
+      }
+    },
+    "n8n-nodes-base.httpRequest": {
+      "required": ["url"],
+      "constraints": {
+        "body_and_form": "不能同时设置 body 和 form-data",
+        "timeout": {
+          "min": 1000,
+          "max": 60000,
+          "default": 30000
+        }
+      }
+    },
+    "n8n-nodes-base.if": {
+      "structure": "两个分支都必须有后续节点"
+    },
+    "n8n-nodes-base.webhook": {
+      "response": "每个 webhook 必须有对应的 Respond to Webhook 节点"
+    },
+    "n8n-nodes-base.scheduleTrigger": {
+      "required": ["rule"],
+      "constraints": {
+        "interval_minutes_min": 1
+      }
+    },
+    "n8n-nodes-base.googleSheets": {
+      "required": ["spreadsheetId"],
+      "operations": ["read", "write", "append", "update"]
+    },
+    "n8n-nodes-base.telegram": {
+      "required": ["chat_id"]
+    },
+    "n8n-nodes-base.code": {
+      "constraints": {
+        "execution_timeout": 5000
+      }
+    }
+  }
+}

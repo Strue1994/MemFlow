@@ -1,0 +1,25 @@
+{
+  "name": "memflow-mcp-server",
+  "version": "1.0.0",
+  "description": "MemFlow MCP Server - Model Context Protocol integration for MemFlow",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "keywords": ["memflow", "mcp", "n8n", "workflow", "automation"],
+  "author": "MemFlow Team",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "axios": "^1.6.0",
+    "express": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^6.0.0"
+  }
+}

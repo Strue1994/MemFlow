@@ -1,0 +1,33 @@
+# Core dependencies
+openai>=1.0.0
+tiktoken>=0.5.0
+pydantic>=2.0.0
+httpx>=0.25.0
+
+# Scheduler
+apscheduler>=3.10.0
+aiosqlite>=0.19.0
+
+# WebUI
+gradio>=4.0.0
+
+# Data collection (for Task 011)
+# unsloth>=2024.1.0  # For fine-tuning (optional)
+
+# MCP SDK
+# TODO: Uncomment when MCP SDK is available
+# mcp>=1.0.0
+
+# Sandbox execution
+e2b-code-interpreter>=0.0.1
+# docker (optional, for local sandbox)
+
+# Utilities
+python-dotenv>=1.0.0
+aiofiles>=23.0.0
+
+# Development
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+black>=23.0.0
+mypy>=1.0.0

@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "memflow.fullname" . }}-web-ui
+  labels:
+    {{- include "memflow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web-ui
+spec:
+  replicas: {{ .Values.webUI.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "memflow.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: web-ui
+  template:
+    metadata:
+      labels:
+        {{- include "memflow.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: web-ui
+    spec:
+      containers:
+        - name: web-ui
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.webUI.image.repository }}:{{ .Values.webUI.image.tag }}"
+          ports:
+            - containerPort: {{ .Values.webUI.service.port }}
+          env:
+            - name: VITE_API_URL
+              value: {{ .Values.webUI.env.VITE_API_URL }}
+          resources: {{ toYaml .Values.webUI.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "memflow.fullname" . }}-web-ui
+  labels:
+    {{- include "memflow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web-ui
+spec:
+  ports:
+    - port: {{ .Values.webUI.service.port }}
+      targetPort: {{ .Values.webUI.service.port }}
+  selector:
+    {{- include "memflow.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: web-ui

@@ -1,0 +1,43 @@
+# Rust
+target/
+Cargo.lock
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime
+.memflow-runtime/
+.memflow-runtime-*/
+.npm-cache/
+.env
+*.db
+*.db-journal
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+
+.cargo-target-*
+__pycache__/
+.zeabur-deploy/

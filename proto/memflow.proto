@@ -1,0 +1,99 @@
+// P2.2: MemFlow gRPC Service Definitions
+
+syntax = "proto3";
+
+package memflow;
+
+// Core Agent Service
+service AgentService {
+  rpc ExecuteTask (TaskRequest) returns (TaskResponse);
+  rpc StreamTask (TaskRequest) returns (stream TaskEvent);
+  rpc GetStatus (Empty) returns (StatusResponse);
+}
+
+// Memory Hub Service
+service MemoryService {
+  rpc Store (StoreRequest) returns (StoreResponse);
+  rpc Search (SearchRequest) returns (SearchResponse);
+  rpc GetStats (Empty) returns (MemoryStats);
+}
+
+// Executor Service
+service ExecutorService {
+  rpc ExecuteWorkflow (WorkflowRequest) returns (WorkflowResponse);
+  rpc ListWorkflows (Empty) returns (WorkflowList);
+}
+
+// Messages
+message TaskRequest {
+  string text = 1;
+  string user_id = 2;
+  string session_id = 3;
+}
+
+message TaskResponse {
+  bool success = 1;
+  string output = 2;
+  uint32 iterations = 3;
+  string error = 4;
+}
+
+message TaskEvent {
+  string type = 1;  // "think" | "act" | "observe" | "result"
+  string content = 2;
+}
+
+message StoreRequest {
+  string content = 1;
+  string memory_type = 2;
+  float importance = 3;
+}
+
+message StoreResponse {
+  string id = 1;
+  bool success = 2;
+}
+
+message SearchRequest {
+  string query = 1;
+  uint32 k = 2;
+}
+
+message SearchResponse {
+  repeated MemoryEntry results = 1;
+}
+
+message MemoryEntry {
+  string id = 1;
+  string content = 2;
+  string memory_type = 3;
+  float importance = 4;
+}
+
+message WorkflowRequest {
+  string workflow_id = 1;
+  string params = 2;
+}
+
+message WorkflowResponse {
+  bool success = 1;
+  string result = 2;
+  string error = 3;
+}
+
+message WorkflowList {
+  repeated string workflow_ids = 1;
+}
+
+message StatusResponse {
+  string version = 1;
+  uint32 uptime_seconds = 2;
+  uint32 active_tasks = 3;
+}
+
+message MemoryStats {
+  uint32 total_entries = 1;
+  uint32 max_entries = 2;
+}
+
+message Empty {}

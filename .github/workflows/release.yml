@@ -1,0 +1,103 @@
+name: Release MemFlow
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-binaries:
+    name: Build binaries
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            ext: tar.gz
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            ext: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            ext: zip
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          target: ${{ matrix.target }}
+      - name: Build CLI
+        run: cargo build --release --target ${{ matrix.target }} -p cli
+      - name: Build Executor
+        run: cargo build --release --target ${{ matrix.target }} -p executor
+      - name: Package
+        run: |
+          mkdir -p release
+          cp target/${{ matrix.target }}/release/cli${{ matrix.ext == '.zip' && '.exe' || '' }} release/
+          cp target/${{ matrix.target }}/release/executor_cli${{ matrix.ext == '.zip' && '.exe' || '' }} release/
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: memflow-${{ matrix.os }}-${{ matrix.target }}
+          path: release
+
+  build-docker:
+    name: Build Docker
+    runs-on: ubuntu-latest
+    needs: build-binaries
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Build executor
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.executor
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/memflow-executor:latest,${{ secrets.DOCKER_USERNAME }}/memflow-executor:${{ github.ref_name }}
+      - name: Build agent
+        uses: docker/build-push-action@v5
+        with:
+          context: ./agent-service
+          file: Dockerfile.agent
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/memflow-agent:latest,${{ secrets.DOCKER_USERNAME }}/memflow-agent:${{ github.ref_name }}
+      - name: Build web-ui
+        uses: docker/build-push-action@v5
+        with:
+          context: ./web-ui
+          file: Dockerfile.web-ui
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/memflow-webui:latest,${{ secrets.DOCKER_USERNAME }}/memflow-webui:${{ github.ref_name }}
+
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build-binaries, build-docker]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: MemFlow ${{ github.ref_name }}
+          body: |
+            ## Installation
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/your-org/memflow/main/install.sh | bash
+            ```
+          files: artifacts/**
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

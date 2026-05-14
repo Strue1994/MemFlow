@@ -1,0 +1,25 @@
+{
+  "name": "simple_http_get",
+  "workflow": {
+    "name": "Simple HTTP Get",
+    "nodes": [
+      {
+        "id": "n1",
+        "name": "HTTP Request",
+        "type": "n8n-nodes-base.httpRequest",
+        "position": [100, 100],
+        "parameters": {
+          "method": "GET",
+          "url": "https://httpbin.org/get",
+          "sendHeaders": true
+        }
+      }
+    ],
+    "connections": []
+  },
+  "input": null,
+  "expected_output": {
+    "status": "success"
+  },
+  "tags": ["http", "get", "simple"]
+}

@@ -1,0 +1,26 @@
+{{- if .Values.monitoring.prometheusRules.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "memflow.fullname" . }}-alerts
+  labels:
+    {{- include "memflow.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: memflow
+      rules:
+        - alert: ExecutorDown
+          expr: up{component="executor"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Executor is down"
+        - alert: HighErrorRate
+          expr: rate(memflow_errors_total[5m]) > 0.1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High error rate detected"
+{{- end }}

@@ -1,0 +1,28 @@
+{
+  "name": "agent-service",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "node dist/index.js",
+    "test": "npm run build && node dist/index.test.js && node dist/task_router/router.test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@types/node": "^20.14.0",
+    "axios": "^1.15.0",
+    "express": "^4.21.0",
+    "openai": "^4.77.0",
+    "redis": "^4.7.1",
+    "telegraf": "^4.16.3",
+    "typescript": "^5.5.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21"
+  }
+}

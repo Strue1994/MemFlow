@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "memflow.fullname" . }}-agent-service
+  labels:
+    {{- include "memflow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent-service
+spec:
+  replicas: {{ .Values.agentService.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "memflow.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: agent-service
+  template:
+    metadata:
+      labels:
+        {{- include "memflow.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: agent-service
+    spec:
+      containers:
+        - name: agent-service
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.agentService.image.repository }}:{{ .Values.agentService.image.tag }}"
+          ports:
+            - containerPort: {{ .Values.agentService.service.port }}
+          env:
+            - name: PORT
+              value: {{ .Values.agentService.env.PORT }}
+            - name: EXECUTOR_URL
+              value: {{ .Values.agentService.env.EXECUTOR_URL }}
+            - name: MEMORY_HUB_URL
+              value: {{ .Values.agentService.env.MEMORY_HUB_URL }}
+            - name: EXECUTOR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "memflow.fullname" . }}-secrets
+                  key: executor-api-key
+                  optional: true
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "memflow.fullname" . }}-secrets
+                  key: openai-api-key
+                  optional: true
+          resources: {{ toYaml .Values.agentService.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "memflow.fullname" . }}-agent-service
+  labels:
+    {{- include "memflow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent-service
+spec:
+  ports:
+    - port: {{ .Values.agentService.service.port }}
+      targetPort: {{ .Values.agentService.service.port }}
+  selector:
+    {{- include "memflow.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: agent-service

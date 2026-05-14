@@ -1,0 +1,34 @@
+# MemFlow Helm Values - Production Ready
+# Usage: helm install memflow ./deploy/helm/memflow -f values.prod.yaml
+
+replicaCount: 3
+
+executor:
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  resources:
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+redis:
+  maxmemory: 256mb
+  maxmemoryPolicy: allkeys-lru
+
+postgres:
+  persistence:
+    enabled: true
+    size: 10Gi
+
+podDisruptionBudget:
+  minAvailable: 2
+
+networkPolicy:
+  enabled: true
+
+ingress:
+  enabled: true
+  className: nginx

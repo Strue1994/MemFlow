@@ -1,0 +1,4 @@
+name: memflow
+description: 通过 MemFlow 创建和执行 n8n 工作流
+version: 1.0.0
+author: MemFlow Team
