@@ -7,21 +7,34 @@ MemFlow is an open-source AI agent platform that combines a high-performance Rus
 ## Quick Start
 
 ```bash
-# 1. Start the services
-docker compose up -d
+# 1. Install dependencies & build
+cd agent-service && npm install && npm run build
 
-# 2. Check health
+# 2. Run the setup wizard (interactive — guides you through everything)
+npm run setup
+
+# 3. Service is running at http://localhost:3000
+#    Try it out:
 curl http://localhost:3000/health
+curl http://localhost:3000/skills
+```
 
-# 3. Configure an LLM provider
-curl -X POST http://localhost:3000/providers \
-  -H "Content-Type: application/json" \
-  -d '{"id":"openai","apiKey":"sk-...","enabled":true}'
+The setup wizard will:
+- Check prerequisites (Node.js, Docker)
+- Ask for your LLM provider API keys (OpenAI, Anthropic, Groq, etc.)
+- Auto-detect any existing `.env` file
+- Optionally configure messaging channels (Telegram, Discord, Slack)
+- Start the service
+- Verify everything works
 
-# 4. Run your first agent task
-curl -X POST http://localhost:3000/agent/execute \
-  -H "Content-Type: application/json" \
-  -d '{"text":"What is 2+2?"}'
+> **Like `openclaw onboard` or `hermes setup`** — but for MemFlow.
+
+### Manual start (if you prefer)
+
+```bash
+cd agent-service
+npm start
+# Service runs on http://localhost:3000
 ```
 
 ## Architecture

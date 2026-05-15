@@ -1,14 +1,11 @@
 /**
- * MemFlow Setup Wizard — CLI onboarding like openclaw onboard / hermes setup
+ * MemFlow Setup Wizard v2 — interactive CLI onboarding
  *
- * Usage: npx ts-node setup.ts  or  node dist/setup.js
+ * Usage:
+ *   cd agent-service && npm run setup
+ *   # or:  npx tsx setup.ts
  *
- * Guides the user through:
- * 1. Checking prerequisites
- * 2. Configuring LLM providers
- * 3. Configuring messaging channels
- * 4. Testing the configuration
- * 5. Starting the service
+ * Like openclaw onboard / hermes setup, but for MemFlow.
  */
 
 import * as readline from "node:readline";
@@ -17,244 +14,289 @@ import * as path from "node:path";
 import { execSync, spawn } from "node:child_process";
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-function question(prompt: string): Promise<string> {
-  return new Promise((resolve) => rl.question(prompt, resolve));
-}
+const q = (p: string): Promise<string> => new Promise((r) => rl.question(p, r));
 
-const CYAN = "\x1b[36m";
-const GREEN = "\x1b[32m";
-const YELLOW = "\x1b[33m";
-const RED = "\x1b[31m";
-const RESET = "\x1b[0m";
-const BOLD = "\x1b[1m";
+const C = "\x1b[36m", G = "\x1b[32m", Y = "\x1b[33m", R = "\x1b[31m", X = "\x1b[0m", B = "\x1b[1m";
+const log = (m: string, c = "") => console.log(`${c}${m}${X}`);
+const step = (m: string) => log(`\n>>> ${m}`, C);
+const ok = (m: string) => log(`  ${G}✓${X} ${m}`);
+const warn = (m: string) => log(`  ${Y}⚠${X} ${m}`);
+const fail = (m: string) => { log(`  ${R}✗${X} ${m}`, R); process.exit(1); };
 
-function log(msg: string, color = "") { console.log(`${color}${msg}${RESET}`); }
-function step(msg: string) { log(`\n>>> ${msg}`, CYAN); }
-function ok(msg: string) { log(`  [OK] ${msg}`, GREEN); }
-function warn(msg: string) { log(`  [!] ${msg}`, YELLOW); }
-function fail(msg: string) { log(`  [ERR] ${msg}`, RED); }
-
-const RUNTIME_ROOT = process.env.MEMFLOW_RUNTIME_ROOT || path.resolve(process.cwd(), "..", ".memflow-runtime");
-const CONFIG_DIR = path.resolve(RUNTIME_ROOT, "config");
+const ROOT = process.env.MEMFLOW_RUNTIME_ROOT || path.resolve(process.cwd(), "..", ".memflow-runtime");
+const CONFIG_DIR = path.resolve(ROOT, "config");
 const PROVIDERS_PATH = path.resolve(CONFIG_DIR, "providers.json");
-const SKILLS_DIR = path.resolve(RUNTIME_ROOT, "skills");
+const ENV_PATH = path.resolve(process.cwd(), "..", ".env");
 
-// ---- Prerequisites ----
+const PROVIDER_PRESETS: Record<string, { label: string; defaultModel: string }> = {
+  openai: { label: "OpenAI", defaultModel: "gpt-4o-mini" },
+  anthropic: { label: "Anthropic", defaultModel: "claude-sonnet-4-20250514" },
+  groq: { label: "Groq (fast/cheap)", defaultModel: "llama-3.3-70b-versatile" },
+  deepseek: { label: "DeepSeek (cheap)", defaultModel: "deepseek-chat" },
+  gemini: { label: "Google Gemini", defaultModel: "gemini-2.0-flash" },
+  openrouter: { label: "OpenRouter", defaultModel: "auto" },
+  ollama: { label: "Ollama (local)", defaultModel: "llama3.2" },
+};
 
-async function checkPrerequisites(): Promise<boolean> {
-  step("Checking prerequisites");
-  let allOk = true;
+// ─── CHECK ─────────────────────────────────────────────
 
-  // Node.js
-  try {
-    const nodeVer = execSync("node --version", { encoding: "utf8" }).trim();
-    ok(`Node.js ${nodeVer}`);
-  } catch { warn("Node.js not found. Install from https://nodejs.org"); allOk = false; }
+async function checkPrereqs() {
+  step("1/5  Checking prerequisites");
+  let ok_ = true;
 
-  // Docker (optional)
-  try {
-    const dockerVer = execSync("docker --version", { encoding: "utf8" }).trim();
-    ok(`Docker ${dockerVer}`);
-  } catch { warn("Docker not found (optional — needed for Docker Compose deployment)"); }
+  try { const v = execSync("node --version", { encoding: "utf8" }).trim(); ok(`Node.js ${v}`); }
+  catch { warn("Node.js not found → https://nodejs.org"); ok_ = false; }
 
-  // Git
-  try {
-    const gitVer = execSync("git --version", { encoding: "utf8" }).trim();
-    ok(`Git ${gitVer}`);
-  } catch { warn("Git not found (optional)"); }
+  try { execSync("npx --version", { encoding: "utf8" }); ok("npx available"); }
+  catch { warn("npx not available, run: npm install -g npx"); ok_ = false; }
 
-  // Port 3000
-  try {
-    const resp = await fetch("http://localhost:3000/health");
-    if (resp.ok) warn("Port 3000 already in use — another MemFlow instance may be running");
-  } catch { ok("Port 3000 is free"); }
+  try { execSync("docker --version", { encoding: "utf8" }).trim(); ok("Docker installed"); }
+  catch { /* optional */ }
 
-  return allOk;
+  return ok_;
 }
 
-// ---- Provider Configuration ----
+// ─── BUILD ─────────────────────────────────────────────
 
-async function configureProviders(): Promise<void> {
-  step("Configure LLM Providers");
-  log("At least one LLM provider is required. Supported providers:", YELLOW);
-  log("  openai, anthropic, groq, deepseek, gemini, together, perplexity, xai, mistral, ollama");
-  log("(You can add more later via the API)\n");
-
-  const providers: any[] = [];
-  const existing = loadProviders();
-  if (existing.length > 0) {
-    log(`Found ${existing.length} existing provider(s). Skipping setup...`, GREEN);
-    return;
-  }
-
-  while (true) {
-    const id = await question("Enter provider id (e.g. openai) or press Enter to finish: ");
-    if (!id) break;
-
-    const apiKey = await question(`  API key for ${id}: `);
-    if (!apiKey) { warn("API key required, skipping"); continue; }
-
-    const model = await question(`  Model (default: auto): `) || "auto";
-
-    providers.push({ id, apiKey, model, enabled: true });
-    ok(`Added ${id}`);
-    log(""); // blank line
-  }
-
-  if (providers.length === 0) {
-    warn("No providers configured. You can add them later via:");
-    log("  curl -X POST http://localhost:3000/providers -d '{\"id\":\"openai\",\"apiKey\":\"sk-...\"}'");
-    return;
-  }
-
-  saveProviders(providers);
-  ok(`${providers.length} provider(s) saved to ${PROVIDERS_PATH}`);
+async function ensureBuilt() {
+  const dist = path.resolve(process.cwd(), "dist", "index.js");
+  if (fs.existsSync(dist)) { ok("Agent service already built"); return; }
+  step("Building agent service...");
+  execSync("npm install", { cwd: process.cwd(), stdio: "pipe" });
+  execSync("npx tsc --skipLibCheck", { cwd: process.cwd(), stdio: "inherit" });
+  ok("Build complete");
 }
 
-function loadProviders(): any[] {
-  try { return JSON.parse(fs.readFileSync(PROVIDERS_PATH, "utf-8")).providers || []; }
-  catch { return []; }
-}
+// ─── START ─────────────────────────────────────────────
 
-function saveProviders(providers: any[]): void {
-  const config = { version: 1, providers, channels: [], updatedAt: new Date().toISOString() };
-  if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  fs.writeFileSync(PROVIDERS_PATH, JSON.stringify(config, null, 2), "utf-8");
-}
+async function startAgent(): Promise<boolean> {
+  const alive = await fetch("http://localhost:3000/health").then((r) => r.ok).catch(() => false);
+  if (alive) { ok("Agent service already running on http://localhost:3000"); return true; }
 
-// ---- Channel Configuration ----
+  const a = await q("\nStart agent service now? (Y/n): ");
+  if (a.toLowerCase() === "n") { warn("Start manually later: cd agent-service && npm start"); return false; }
 
-async function configureChannels(): Promise<void> {
-  step("Configure Messaging Channels (optional)");
-  log("Supported channels: telegram, discord, slack, whatsapp, signal, email, matrix, teams, google-chat, line");
-  log("You can also configure channels later via API.\n");
-
-  const answer = await question("Configure a channel now? (y/n): ");
-  if (answer.toLowerCase() !== "y") {
-    ok("Skipping channel configuration");
-    return;
-  }
-
-  const channel = await question("Channel id (e.g. telegram): ");
-  if (!channel) { warn("No channel configured"); return; }
-  ok(`To configure ${channel}, run later:`);
-  log(`  curl -X POST http://localhost:3000/channels -H "Content-Type: application/json" -d '{"id":"${channel}","enabled":true,"config":{...}}'`);
-}
-
-// ---- Service Start ----
-
-async function startService(): Promise<void> {
-  step("Starting MemFlow Agent Service");
-
-  const alreadyRunning = await fetch("http://localhost:3000/health").then((r) => r.ok).catch(() => false);
-  if (alreadyRunning) {
-    ok("Agent service is already running on http://localhost:3000");
-    return;
-  }
-
-  const distPath = path.resolve(process.cwd(), "dist", "index.js");
-  if (!fs.existsSync(distPath)) {
-    warn("Building TypeScript...");
-    execSync("npx tsc --skipLibCheck", { cwd: process.cwd(), stdio: "inherit" });
-    ok("Build complete");
-  }
-
-  log("Starting agent service...");
-  const proc = spawn("node", ["dist/index.js"], {
-    cwd: process.cwd(),
-    stdio: "inherit",
-    env: { ...process.env, MEMFLOW_RUNTIME_ROOT: RUNTIME_ROOT },
+  step("2/5  Starting agent service");
+  const p = spawn("node", ["dist/index.js"], {
+    cwd: process.cwd(), stdio: "pipe",
+    env: { ...process.env, MEMFLOW_RUNTIME_ROOT: ROOT },
     detached: true,
   });
+  let out = "";
+  p.stdout?.on("data", (d) => { out += d.toString(); });
+  p.stderr?.on("data", (d) => { out += d.toString(); });
 
-  // Wait for it to be ready
-  for (let i = 0; i < 15; i++) {
+  // Wait up to 20s
+  for (let i = 0; i < 20; i++) {
     await new Promise((r) => setTimeout(r, 1000));
-    const ready = await fetch("http://localhost:3000/health").then((r) => r.ok).catch(() => false);
-    if (ready) {
-      ok(`Agent service is running on http://localhost:3000 (PID: ${proc.pid})`);
+    if (await fetch("http://localhost:3000/health").then((r) => r.ok).catch(() => false)) {
+      ok(`Agent service running on http://localhost:3000`);
+      return true;
+    }
+  }
+  warn("Service started but not responding yet. Check: cd agent-service && npm start");
+  return false;
+}
+
+// ─── PROVIDER MENU ─────────────────────────────────────
+
+async function configureProviders() {
+  step("3/5  LLM Provider");
+
+  // Check if already configured
+  const existing = loadConfig().providers;
+  if (existing.length > 0) {
+    ok(`${existing.length} provider(s) already configured:`);
+    existing.forEach((p) => log(`     ${p.id} (${p.model})`));
+    const a = await q("\nReconfigure? (y/N): ");
+    if (a.toLowerCase() !== "y") return;
+  }
+
+  // Scan .env
+  const envKeys = scanEnvFile();
+  if (envKeys.length > 0) {
+    log(`\n  ${Y}Found API keys in .env:${X}`, Y);
+    envKeys.forEach((k) => log(`     ${k.envVar} → ${mask(k.value)}`));
+    const a = await q("  Import these providers? (Y/n): ");
+    if (a.toLowerCase() !== "n") {
+      const providers = envKeys.map((k) => ({
+        id: k.providerId, apiKey: k.value, model: PROVIDER_PRESETS[k.providerId]?.defaultModel || "auto", enabled: true,
+      }));
+      saveConfig({ providers, channels: loadConfig().channels });
+      ok(`Imported ${providers.length} provider(s) from .env`);
       return;
     }
   }
 
-  warn("Service started but not yet responding. Check logs with: node dist/index.js");
-}
+  // Interactive menu
+  log("\nAvailable providers:");
+  const ids = Object.keys(PROVIDER_PRESETS);
+  ids.forEach((id, i) => log(`  ${i + 1}. ${PROVIDER_PRESETS[id].label} (${id})`));
+  log("  a. Custom provider (any OpenAI-compatible endpoint)");
+  log("  0. Done\n");
 
-// ---- Test ----
+  const providers: { id: string; apiKey: string; model: string; enabled: boolean }[] = [];
 
-async function testConfiguration(): Promise<void> {
-  step("Testing Configuration");
+  while (true) {
+    const choice = await q("Select provider by number (or 0 to finish): ");
+    if (!choice || choice === "0") break;
 
-  const health = await fetch("http://localhost:3000/health").then((r) => r.json()).catch(() => null);
-  if (!health) { fail("Agent service is not running. Start it first."); return; }
-  ok(`Health: ${health.status}, uptime: ${health.uptime_s}s`);
-
-  const live = await fetch("http://localhost:3000/live").then((r) => r.json()).catch(() => null);
-  if (live?.live) ok("Liveness check passed");
-
-  const providers = await fetch("http://localhost:3000/providers").then((r) => r.json()).catch(() => null);
-  if (providers?.providers?.length > 0) ok(`${providers.providers.length} provider(s) configured`);
-  else warn("No providers configured. Add one via POST /providers");
-
-  const skills = await fetch("http://localhost:3000/skills").then((r) => r.json()).catch(() => null);
-  if (skills?.skills?.length > 0) ok(`${skills.skills.length} skills loaded`);
-}
-
-// ---- Main ----
-
-async function main() {
-  log(`${BOLD}MemFlow Setup Wizard${RESET}`, CYAN);
-  log("This wizard will help you set up MemFlow step by step.\n");
-
-  // 1. Prerequisites
-  const prereqsOk = await checkPrerequisites();
-
-  // 2. Agent service must be running for API calls
-  const serviceRunning = await fetch("http://localhost:3000/health").then((r) => r.ok).catch(() => false);
-  if (!serviceRunning) {
-    const start = await question("\nStart the agent service now? (y/n): ");
-    if (start.toLowerCase() === "y") {
-      await startService();
-    } else {
-      warn("Service must be running to configure providers. Start it manually:");
-      log("  cd agent-service && node dist/index.js");
+    const idx = parseInt(choice) - 1;
+    if (idx >= 0 && idx < ids.length) {
+      const id = ids[idx];
+      const preset = PROVIDER_PRESETS[id];
+      const apiKey = await q(`  API key for ${preset.label}: `);
+      if (!apiKey) { warn("Skipped"); continue; }
+      const model = await q(`  Model (default: ${preset.defaultModel}): `) || preset.defaultModel;
+      providers.push({ id, apiKey, model, enabled: true });
+      ok(`Added ${preset.label}`);
+    } else if (choice === "a") {
+      const id = await q("  Custom provider id (e.g. my-llm): ");
+      if (!id) continue;
+      const baseUrl = await q("  Base URL (e.g. http://localhost:11434/v1): ");
+      const apiKey = await q("  API key: ");
+      const model = await q("  Model name: ");
+      providers.push({ id, apiKey, model, enabled: true });
+      ok(`Added custom provider: ${id}`);
     }
   }
 
-  // 3. Configure providers
-  await configureProviders();
+  if (providers.length === 0) { warn("No providers configured"); return; }
 
-  // 4. Configure channels
-  await configureChannels();
+  const current = loadConfig();
+  current.providers = [...current.providers, ...providers];
+  saveConfig(current);
+  ok(`${providers.length} provider(s) saved`);
+  log(`  File: ${PROVIDERS_PATH}`);
+}
 
-  // 5. Test
-  if (await fetch("http://localhost:3000/health").then((r) => r.ok).catch(() => false)) {
-    await testConfiguration();
+// ─── CHANNEL CONFIG ────────────────────────────────────
+
+async function configureChannels() {
+  step("4/5  Messaging Channels (optional)");
+
+  const channels = [
+    { id: "telegram", fields: [{ key: "botToken", label: "Bot token (from @BotFather)" }] },
+    { id: "discord", fields: [{ key: "botToken", label: "Bot token (from Developer Portal)" }] },
+    { id: "slack", fields: [{ key: "token", label: "Bot token (xoxb-...)" }] },
+    { id: "whatsapp", fields: [{ key: "token", label: "Access token" }, { key: "phoneNumberId", label: "Phone number ID" }] },
+    { id: "signal", fields: [{ key: "signalApiUrl", label: "Signal API URL" }] },
+  ];
+
+  const a = await q("Configure a messaging channel? (y/N): ");
+  if (a.toLowerCase() !== "y") { ok("Skipped (add later via API)"); return; }
+
+  log("\nAvailable channels:");
+  channels.forEach((c, i) => log(`  ${i + 1}. ${c.id}`));
+
+  const choice = await q("Select channel by number: ");
+  const idx = parseInt(choice) - 1;
+  if (idx < 0 || idx >= channels.length) { warn("Invalid selection"); return; }
+
+  const ch = channels[idx];
+  const config: Record<string, string> = {};
+  for (const f of ch.fields) {
+    config[f.key] = await q(`  ${f.label}: `) || "";
   }
 
-  // 6. Summary
-  step("Setup Complete");
-  log(`
-${BOLD}Next Steps:${RESET}
-  • API:       http://localhost:3000
-  • Health:    curl http://localhost:3000/health
-  • Run task:  curl -X POST http://localhost:3000/agent/execute \\
-                 -H "Content-Type: application/json" \\
-                 -d '{"text":"hello"}'
+  const answer = await q(`  Enable ${ch.id} now? (Y/n): `);
+  const enabled = answer.toLowerCase() !== "n";
 
-${BOLD}Documentation:${RESET}
-  • README:    ${path.resolve(process.cwd(), "..", "README.md")}
-  • Deploy:    ${path.resolve(process.cwd(), "..", "DEPLOYMENT_GUIDE.md")}
+  const current = loadConfig();
+  current.channels.push({ id: ch.id, label: ch.id, enabled, config });
+  saveConfig(current);
+  ok(`${ch.id} configured and ${enabled ? "enabled" : "disabled"}`);
+}
 
-${BOLD}Useful Commands:${RESET}
-  • View skills:       curl http://localhost:3000/skills
-  • View providers:    curl http://localhost:3000/providers
-  • Run curator:       curl -X POST http://localhost:3000/curator/run
-  • Health check:      curl http://localhost:3000/health
-  • Metrics:           curl http://localhost:3000/metrics
-`, GREEN);
+// ─── VERIFY ────────────────────────────────────────────
+
+async function verifySetup() {
+  step("5/5  Verification");
+  if (!await fetch("http://localhost:3000/health").then((r) => r.ok).catch(() => false)) {
+    warn("Service not running. Verify later with: curl http://localhost:3000/health");
+    return;
+  }
+  const h = await fetch("http://localhost:3000/health").then((r) => r.json());
+  ok(`Health: ${h.status}, uptime: ${h.uptime_s}s`);
+
+  const p = await fetch("http://localhost:3000/providers").then((r) => r.json()).catch(() => ({}));
+  if (p.providers?.length > 0) ok(`${p.providers.length} provider(s) configured`);
+
+  const s = await fetch("http://localhost:3000/skills").then((r) => r.json()).catch(() => ({}));
+  if (s.skills?.length > 0) ok(`${s.skills.length} skills loaded`);
+
+  // Quick agent test
+  const r = await fetch("http://localhost:3000/agent/execute", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: "hello", stream: false }),
+  }).then((r) => r.json()).catch(() => ({}));
+  if (r.success) ok(`Agent test: ${r.output?.slice(0, 80)}...`);
+  else if (r.error) warn(`Agent test: ${r.error}`);
+}
+
+// ─── HELPERS ───────────────────────────────────────────
+
+function loadConfig(): { providers: any[]; channels: any[] } {
+  try { const raw = JSON.parse(fs.readFileSync(PROVIDERS_PATH, "utf-8")); return { providers: raw.providers || [], channels: raw.channels || [] }; }
+  catch { return { providers: [], channels: [] }; }
+}
+
+function saveConfig(cfg: { providers: any[]; channels: any[] }): void {
+  if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+  fs.writeFileSync(PROVIDERS_PATH, JSON.stringify({ version: 1, ...cfg, updatedAt: new Date().toISOString() }, null, 2), "utf-8");
+}
+
+function scanEnvFile(): { envVar: string; providerId: string; value: string }[] {
+  try {
+    const content = fs.readFileSync(ENV_PATH, "utf-8");
+    const map: Record<string, string> = {
+      OPENAI_API_KEY: "openai", ANTHROPIC_API_KEY: "anthropic", GROQ_API_KEY: "groq",
+      DEEPSEEK_API_KEY: "deepseek", GEMINI_API_KEY: "gemini",
+    };
+    const found: { envVar: string; providerId: string; value: string }[] = [];
+    for (const [envVar, providerId] of Object.entries(map)) {
+      const match = content.match(new RegExp(`${envVar}=(.+)`));
+      if (match?.[1]?.trim()) found.push({ envVar, providerId, value: match[1].trim() });
+    }
+    return found;
+  } catch { return []; }
+}
+
+function mask(s: string): string {
+  if (s.length < 8) return s;
+  return s.slice(0, 4) + "…" + s.slice(-4);
+}
+
+// ─── MAIN ──────────────────────────────────────────────
+
+async function main() {
+  console.log(`${B}${C}╔══════════════════════════════════════╗${X}`);
+  console.log(`${B}${C}║      MemFlow Setup Wizard v2         ║${X}`);
+  console.log(`${B}${C}║    Like openclaw onboard, but for     ║${X}`);
+  console.log(`${B}${C}║    your own AI agent platform.        ║${X}`);
+  console.log(`${B}${C}╚══════════════════════════════════════╝${X}\n`);
+
+  if (!await checkPrereqs()) { fail("Fix prerequisites and re-run"); }
+  await ensureBuilt();
+  const running = await startAgent();
+  if (running) { await configureProviders(); await configureChannels(); await verifySetup(); }
+
+  const port = 3000;
+  log(`\n${B}${G}✅ Setup complete!${X}`, G);
+  log(`${B}  Agent service:${X}  http://localhost:${port}`);
+  log(`${B}  Health check:${X}  curl http://localhost:${port}/health`);
+  log(`${B}  Run a task:${X}   curl -X POST http://localhost:${port}/agent/execute \\`);
+  log(`                      -H "Content-Type: application/json" \\`);
+  log(`                      -d '{"text":"hello"}'`);
+  log(`\n${B}More:${X}`);
+  log(`  Skills:       curl http://localhost:${port}/skills`);
+  log(`  Curator:      curl -X POST http://localhost:${port}/curator/run`);
+  log(`  Middleware:   curl http://localhost:${port}/middleware/config`);
+  log(`  Metrics:      curl http://localhost:${port}/metrics`);
+  log(`  Channels:     curl http://localhost:${port}/channels`);
+  log(`\n${Y}Need help?${X}  README.md  |  DEPLOYMENT_GUIDE.md\n`);
 
   rl.close();
 }
 
-main().catch((err) => { console.error(err); process.exit(1); });
+main().catch((e) => { console.error(e); process.exit(1); });
