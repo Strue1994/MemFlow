@@ -1,0 +1,7 @@
+Agent service ready at http://127.0.0.1:3310
+Agent service running on port 3310
+Executor URL: http://127.0.0.1:8092
+Executor API key configured: yes
+OpenAI API key configured: no
+OpenAI base URL configured: https://api.openai.com/v1
+OpenAI model: gpt-4o-mini

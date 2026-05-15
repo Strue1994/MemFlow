@@ -1,0 +1,127 @@
+0 verbose cli D:\Flowise\node.exe C:\Users\12989\AppData\Roaming\npm\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.11.0
+2 info using node@v24.11.1
+3 silly config load:file:C:\Users\12989\AppData\Roaming\npm\node_modules\npm\npmrc
+4 silly config load:file:D:\文件\网站\strueauto.com\MemFlow\web-ui\.npmrc
+5 silly config load:file:C:\Users\12989\.npmrc
+6 silly config load:file:C:\Users\12989\AppData\Roaming\npm\etc\npmrc
+7 verbose title npm install
+8 verbose argv "install"
+9 verbose logfile logs-max:10 dir:d:\文件\网站\strueauto.com\MemFlow\web-ui\.npm-cache\_logs\2026-04-13T08_54_03_203Z-
+10 verbose logfile d:\文件\网站\strueauto.com\MemFlow\web-ui\.npm-cache\_logs\2026-04-13T08_54_03_203Z-debug-0.log
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:4496293888 maxSize:1124073472 maxEntrySize:562036736
+13 silly idealTree buildDeps
+14 silly fetch manifest @xyflow/react@^12.0.0
+15 silly packumentCache full:https://registry.npmjs.org/@xyflow%2freact cache-miss
+16 http fetch GET 200 https://registry.npmjs.org/@xyflow%2freact 1069ms (cache miss)
+17 silly fetch manifest axios@^1.7.0
+18 silly packumentCache full:https://registry.npmjs.org/axios cache-miss
+19 http fetch GET 200 https://registry.npmjs.org/npm 2050ms
+20 http fetch GET 200 https://registry.npmjs.org/axios 837ms (cache miss)
+21 silly fetch manifest react@^18.3.0
+22 silly packumentCache full:https://registry.npmjs.org/react cache-miss
+23 http fetch GET 200 https://registry.npmjs.org/react 1708ms (cache miss)
+24 silly fetch manifest react-dom@^18.3.0
+25 silly packumentCache full:https://registry.npmjs.org/react-dom cache-miss
+26 http fetch GET 200 https://registry.npmjs.org/react-dom 1615ms (cache miss)
+27 silly fetch manifest zustand@^5.0.0
+28 silly packumentCache full:https://registry.npmjs.org/zustand cache-miss
+29 http fetch GET 200 https://registry.npmjs.org/zustand 644ms (cache miss)
+30 silly fetch manifest lucide-react@^0.400.0
+31 silly packumentCache full:https://registry.npmjs.org/lucide-react cache-miss
+32 http fetch GET 200 https://registry.npmjs.org/lucide-react 747ms (cache miss)
+33 silly fetch manifest @types/react@^18.3.0
+34 silly packumentCache full:https://registry.npmjs.org/@types%2freact cache-miss
+35 http fetch GET 200 https://registry.npmjs.org/@types%2freact 658ms (cache miss)
+36 silly fetch manifest @types/react-dom@^18.3.0
+37 silly packumentCache full:https://registry.npmjs.org/@types%2freact-dom cache-miss
+38 http fetch GET 200 https://registry.npmjs.org/@types%2freact-dom 548ms (cache miss)
+39 silly fetch manifest @vitejs/plugin-react@^4.3.0
+40 silly packumentCache full:https://registry.npmjs.org/@vitejs%2fplugin-react cache-miss
+41 http fetch GET 200 https://registry.npmjs.org/@vitejs%2fplugin-react 306ms (cache miss)
+42 silly fetch manifest autoprefixer@^10.4.19
+43 silly packumentCache full:https://registry.npmjs.org/autoprefixer cache-miss
+44 http fetch GET 200 https://registry.npmjs.org/autoprefixer 476ms (cache miss)
+45 silly fetch manifest postcss@^8.4.38
+46 silly packumentCache full:https://registry.npmjs.org/postcss cache-miss
+47 http fetch GET 200 https://registry.npmjs.org/postcss 638ms (cache miss)
+48 silly fetch manifest tailwindcss@^3.4.4
+49 silly packumentCache full:https://registry.npmjs.org/tailwindcss cache-miss
+50 http fetch GET 200 https://registry.npmjs.org/tailwindcss 1444ms (cache miss)
+51 silly fetch manifest typescript@^5.4.5
+52 silly packumentCache full:https://registry.npmjs.org/typescript cache-miss
+53 http fetch GET 200 https://registry.npmjs.org/typescript 1032ms (cache miss)
+54 silly fetch manifest vite@^5.3.0
+55 silly packumentCache full:https://registry.npmjs.org/vite cache-miss
+56 http fetch GET 200 https://registry.npmjs.org/vite 5267ms (cache miss)
+57 silly placeDep ROOT @types/react@ OK for: memflow-web-ui@0.1.0 want: ^18.3.0
+58 silly placeDep ROOT @types/react-dom@ OK for: memflow-web-ui@0.1.0 want: ^18.3.0
+59 silly placeDep ROOT @vitejs/plugin-react@ OK for: memflow-web-ui@0.1.0 want: ^4.3.0
+60 silly placeDep ROOT @xyflow/react@ OK for: memflow-web-ui@0.1.0 want: ^12.0.0
+61 silly placeDep ROOT autoprefixer@ OK for: memflow-web-ui@0.1.0 want: ^10.4.19
+62 silly placeDep ROOT axios@ OK for: memflow-web-ui@0.1.0 want: ^1.7.0
+63 silly placeDep ROOT lucide-react@ OK for: memflow-web-ui@0.1.0 want: ^0.400.0
+64 silly placeDep ROOT postcss@ OK for: memflow-web-ui@0.1.0 want: ^8.4.38
+65 silly placeDep ROOT react@ OK for: memflow-web-ui@0.1.0 want: ^18.3.0
+66 silly placeDep ROOT react-dom@ OK for: memflow-web-ui@0.1.0 want: ^18.3.0
+67 silly placeDep ROOT tailwindcss@ OK for: memflow-web-ui@0.1.0 want: ^3.4.4
+68 silly placeDep ROOT typescript@ OK for: memflow-web-ui@0.1.0 want: ^5.4.5
+69 silly placeDep ROOT vite@ OK for: memflow-web-ui@0.1.0 want: ^5.3.0
+70 silly placeDep ROOT zustand@ OK for: memflow-web-ui@0.1.0 want: ^5.0.0
+71 verbose type system
+72 verbose stack FetchError: Invalid response body while trying to fetch https://registry.npmjs.org/@types%2freact: EPERM: operation not permitted, unlink 'd:\文件\网站\strueauto.com\MemFlow\web-ui\.npm-cache\_cacache\tmp\955b29cd'
+72 verbose stack     at C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\minipass-fetch\lib\body.js:174:15
+72 verbose stack     at async Response.json (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\minipass-fetch\lib\body.js:75:17)
+72 verbose stack     at async RegistryFetcher.packument (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\pacote\lib\registry.js:98:25)
+72 verbose stack     at async RegistryFetcher.manifest (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\pacote\lib\registry.js:128:23)
+72 verbose stack     at async #fetchManifest (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:1227:20)
+72 verbose stack     at async #nodeFromEdge (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:1061:19)
+72 verbose stack     at async #buildDepStep (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:917:11)
+72 verbose stack     at async Arborist.buildIdealTree (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:170:7)
+72 verbose stack     at async Promise.all (index 1)
+72 verbose stack     at async Arborist.reify (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\reify.js:110:5)
+73 error code EPERM
+74 error syscall unlink
+75 error path d:\文件\网站\strueauto.com\MemFlow\web-ui\.npm-cache\_cacache\tmp\955b29cd
+76 error errno EPERM
+77 error FetchError: Invalid response body while trying to fetch https://registry.npmjs.org/@types%2freact: EPERM: operation not permitted, unlink 'd:\文件\网站\strueauto.com\MemFlow\web-ui\.npm-cache\_cacache\tmp\955b29cd'
+77 error     at C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\minipass-fetch\lib\body.js:174:15
+77 error     at async Response.json (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\minipass-fetch\lib\body.js:75:17)
+77 error     at async RegistryFetcher.packument (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\pacote\lib\registry.js:98:25)
+77 error     at async RegistryFetcher.manifest (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\pacote\lib\registry.js:128:23)
+77 error     at async #fetchManifest (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:1227:20)
+77 error     at async #nodeFromEdge (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:1061:19)
+77 error     at async #buildDepStep (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:917:11)
+77 error     at async Arborist.buildIdealTree (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:170:7)
+77 error     at async Promise.all (index 1)
+77 error     at async Arborist.reify (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\reify.js:110:5) {
+77 error   code: 'EPERM',
+77 error   errno: 'EPERM',
+77 error   syscall: 'unlink',
+77 error   path: 'd:\\文件\\网站\\strueauto.com\\MemFlow\\web-ui\\.npm-cache\\_cacache\\tmp\\955b29cd',
+77 error   type: 'system',
+77 error   requiredBy: '.'
+77 error }
+78 error
+78 error The operation was rejected by your operating system.
+78 error It's possible that the file was already in use (by a text editor or antivirus),
+78 error or that you lack permissions to access it.
+78 error
+78 error If you believe this might be a permissions issue, please double-check the
+78 error permissions of the file and its containing directories, or try running
+78 error the command again as root/Administrator.
+79 silly unfinished npm timer reify 1776070448774
+80 silly unfinished npm timer reify:loadTrees 1776070448779
+81 verbose cwd D:\文件\网站\strueauto.com\MemFlow\web-ui
+82 verbose os Windows_NT 10.0.22631
+83 verbose node v24.11.1
+84 verbose npm  v11.11.0
+85 notice
+85 notice New minor version of npm available! 11.11.0 -> 11.12.1
+85 notice Changelog: https://github.com/npm/cli/releases/tag/v11.12.1
+85 notice To update run: npm install -g npm@11.12.1
+85 notice  { force: true, Symbol(proc-log.meta): true }
+86 verbose exit 1
+87 verbose code 1
+88 error A complete log of this run can be found in: d:\文件\网站\strueauto.com\MemFlow\web-ui\.npm-cache\_logs\2026-04-13T08_54_03_203Z-debug-0.log

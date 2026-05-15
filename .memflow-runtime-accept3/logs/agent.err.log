@@ -1,0 +1,45 @@
+=D:\文件\网站\strueauto.com\MemFlow\.memflow-runtime-accept3 : 无法将“=D:\文件\网站\strueauto.com\MemFlow\.memflow-run
+time-accept3”项识别为 cmdlet、函数、脚本文件或可运行程序的名称。请检查名称的拼写，如果包括路径，请确保路径正确，然后再
+试一次。
+所在位置 行:1 字符: 1
++ ='D:\文件\网站\strueauto.com\MemFlow\.memflow-runtime-accept3'; ='D:\\文件\ ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (=D:\文件\网站\strue...runtime-accept3:String) [], CommandNotFoundExcepti
+on
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+=D:\\文件\\网站\\strueauto.com\\MemFlow\\.memflow-runtime-accept3\\config\\llm-settings.json : 无法将“=D:\\文件\\网站\
+\strueauto.com\\MemFlow\\.memflow-runtime-accept3\\config\\llm-settings.json”项识别为 cmdlet、函数、脚本文件或可运行程
+序的名称。请检查名称的拼写，如果包括路径，请确保路径正确，然后再试一次。
+所在位置 行:1 字符: 61
++ ... e-accept3'; ='D:\\文件\\网站\\strueauto.com\\MemFlow\\.memflow-runtime-ac ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (=D:\\文件\\网站\\st...m-settings.json:String) [], CommandNotFoundExcepti
+on
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+=http://127.0.0.1:8092 : 无法将“=http://127.0.0.1:8092”项识别为 cmdlet、函数、脚本文件或可运行程序的名称。请检查名称
+的拼写，如果包括路径，请确保路径正确，然后再试一次。
+所在位置 行:1 字符: 153
++ ... accept3\\config\\llm-settings.json'; ='http://127.0.0.1:8092'; ='b802 ...
++                                          ~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (=http://127.0.0.1:8092:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+=b8028f91-2bc6-4620-8a84-07dc31a4eadc : 无法将“=b8028f91-2bc6-4620-8a84-07dc31a4eadc”项识别为 cmdlet、函数、脚本文件
+或可运行程序的名称。请检查名称的拼写，如果包括路径，请确保路径正确，然后再试一次。
+所在位置 行:1 字符: 179
++ ... tp://127.0.0.1:8092'; ='b8028f91-2bc6-4620-8a84-07dc31a4eadc'; ='3310 ...
++                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (=b8028f91-2bc6-4620-8a84-07dc31a4eadc:String) [], CommandNotFoundExcept 
+   ion
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+=3310 : 无法将“=3310”项识别为 cmdlet、函数、脚本文件或可运行程序的名称。请检查名称的拼写，如果包括路径，请确保路径正
+确，然后再试一次。
+所在位置 行:1 字符: 220
++ ... 0.0.1:8092'; ='b8028f91-2bc6-4620-8a84-07dc31a4eadc'; ='3310'; node d ...
++                                                           ~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (=3310:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 

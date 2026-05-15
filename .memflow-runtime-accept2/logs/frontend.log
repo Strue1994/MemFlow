@@ -1,0 +1,3 @@
+MemFlow web UI ready at http://127.0.0.1:5173
+Serving static files from D:\文件\网站\strueauto.com\MemFlow\web-ui\dist
+Proxying /api/* requests to http://127.0.0.1:3000

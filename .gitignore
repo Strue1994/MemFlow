@@ -1,43 +1,35 @@
 # Rust
 target/
-Cargo.lock
-
 # Node
 node_modules/
-npm-debug.log*
-
-# Python
-__pycache__/
-*.pyc
-*.egg-info/
-.venv/
-
+dist/
+.next/
+# Runtime data
+.memflow-runtime/
+skills/*.json
+# Env
+.env
+.env.local
+*.db
+workflows.db
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-
 # OS
 .DS_Store
 Thumbs.db
-
-# Runtime
-.memflow-runtime/
-.memflow-runtime-*/
-.npm-cache/
-.env
-*.db
-*.db-journal
-
-# Build output
-dist/
-*.tsbuildinfo
-
-# Logs
-logs/
-*.log
-
-.cargo-target-*
+# Python
+*.pyc
 __pycache__/
-.zeabur-deploy/
+*.egg-info/
+# Sisyphus
+.sisyphus/
+# Test artifacts
+check_output.txt
+code_review_report.md
+agent-service/test-mcp-server.js
+agent-service/test-spawn.js
+agent-service/test-mcp-exact.js
+prepare-github.ps1

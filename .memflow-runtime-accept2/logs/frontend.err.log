@@ -1,0 +1,24 @@
+=127.0.0.1 : 无法将“=127.0.0.1”项识别为 cmdlet、函数、脚本文件或可运行程序的名称。请检查名称的拼写，如果包括路径，请
+确保路径正确，然后再试一次。
+所在位置 行:1 字符: 1
++ ='127.0.0.1'; ='5280'; ='http://127.0.0.1:3310'; node ..\scripts\serv ...
++ ~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (=127.0.0.1:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+=5280 : 无法将“=5280”项识别为 cmdlet、函数、脚本文件或可运行程序的名称。请检查名称的拼写，如果包括路径，请确保路径正
+确，然后再试一次。
+所在位置 行:1 字符: 15
++ ='127.0.0.1'; ='5280'; ='http://127.0.0.1:3310'; node ..\scripts\serv ...
++               ~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (=5280:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+=http://127.0.0.1:3310 : 无法将“=http://127.0.0.1:3310”项识别为 cmdlet、函数、脚本文件或可运行程序的名称。请检查名称
+的拼写，如果包括路径，请确保路径正确，然后再试一次。
+所在位置 行:1 字符: 24
++ ='127.0.0.1'; ='5280'; ='http://127.0.0.1:3310'; node ..\scripts\serv ...
++                        ~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (=http://127.0.0.1:3310:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 

@@ -1,0 +1,107 @@
+0 verbose cli D:\Flowise\node.exe C:\Users\12989\AppData\Roaming\npm\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.11.0
+2 info using node@v24.11.1
+3 silly config load:file:C:\Users\12989\AppData\Roaming\npm\node_modules\npm\npmrc
+4 silly config load:file:D:\文件\网站\strueauto.com\MemFlow\agent-service\.npmrc
+5 silly config load:file:C:\Users\12989\.npmrc
+6 silly config load:file:C:\Users\12989\AppData\Roaming\npm\etc\npmrc
+7 verbose title npm install axios redis telegraf
+8 verbose argv "install" "axios" "redis" "telegraf" "--cache" ".npm-cache"
+9 verbose logfile logs-max:10 dir:D:\文件\网站\strueauto.com\MemFlow\agent-service\.npm-cache\_logs\2026-04-15T09_27_38_191Z-
+10 verbose logfile D:\文件\网站\strueauto.com\MemFlow\agent-service\.npm-cache\_logs\2026-04-15T09_27_38_191Z-debug-0.log
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:4496293888 maxSize:1124073472 maxEntrySize:562036736
+13 silly idealTree buildDeps
+14 silly fetch manifest @types/node@^20.14.0
+15 silly packumentCache full:https://registry.npmjs.org/@types%2fnode cache-miss
+16 http fetch GET 200 https://registry.npmjs.org/npm 5953ms
+17 http fetch GET 200 https://registry.npmjs.org/@types%2fnode 8107ms (cache miss)
+18 silly fetch manifest express@^4.21.0
+19 silly packumentCache full:https://registry.npmjs.org/express cache-miss
+20 http fetch GET 200 https://registry.npmjs.org/express 2519ms (cache miss)
+21 silly fetch manifest openai@^4.77.0
+22 silly packumentCache full:https://registry.npmjs.org/openai cache-miss
+23 http fetch GET 200 https://registry.npmjs.org/openai 1355ms (cache miss)
+24 silly fetch manifest typescript@^5.5.0
+25 silly packumentCache full:https://registry.npmjs.org/typescript cache-miss
+26 http fetch GET 200 https://registry.npmjs.org/typescript 4785ms (cache miss)
+27 silly fetch manifest zod@^3.23.0
+28 silly packumentCache full:https://registry.npmjs.org/zod cache-miss
+29 http fetch GET 200 https://registry.npmjs.org/zod 1310ms (cache miss)
+30 silly fetch manifest axios@*
+31 silly packumentCache full:https://registry.npmjs.org/axios cache-miss
+32 http fetch GET 200 https://registry.npmjs.org/axios 720ms (cache miss)
+33 silly fetch manifest redis@*
+34 silly packumentCache full:https://registry.npmjs.org/redis cache-miss
+35 http fetch GET 200 https://registry.npmjs.org/redis 484ms (cache miss)
+36 silly fetch manifest telegraf@*
+37 silly packumentCache full:https://registry.npmjs.org/telegraf cache-miss
+38 http fetch GET 200 https://registry.npmjs.org/telegraf 701ms (cache miss)
+39 silly fetch manifest @types/express@^4.17.21
+40 silly packumentCache full:https://registry.npmjs.org/@types%2fexpress cache-miss
+41 http fetch GET 200 https://registry.npmjs.org/@types%2fexpress 602ms (cache miss)
+42 silly placeDep ROOT @types/express@ REPLACE for: agent-service@1.0.0 want: ^4.17.21
+43 silly placeDep ROOT @types/node@ OK for: agent-service@1.0.0 want: ^20.14.0
+44 silly placeDep ROOT axios@ OK for: agent-service@1.0.0 want: *
+45 silly placeDep ROOT express@ REPLACE for: agent-service@1.0.0 want: ^4.21.0
+46 silly placeDep ROOT openai@ REPLACE for: agent-service@1.0.0 want: ^4.77.0
+47 silly placeDep ROOT redis@ OK for: agent-service@1.0.0 want: *
+48 silly placeDep ROOT telegraf@ OK for: agent-service@1.0.0 want: *
+49 silly placeDep ROOT typescript@ REPLACE for: agent-service@1.0.0 want: ^5.5.0
+50 silly placeDep ROOT zod@ OK for: agent-service@1.0.0 want: ^3.23.0
+51 verbose type system
+52 verbose stack FetchError: Invalid response body while trying to fetch https://registry.npmjs.org/@types%2fexpress: EPERM: operation not permitted, unlink 'D:\文件\网站\strueauto.com\MemFlow\agent-service\.npm-cache\_cacache\tmp\6417c51e'
+52 verbose stack     at C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\minipass-fetch\lib\body.js:174:15
+52 verbose stack     at async Response.json (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\minipass-fetch\lib\body.js:75:17)
+52 verbose stack     at async RegistryFetcher.packument (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\pacote\lib\registry.js:98:25)
+52 verbose stack     at async RegistryFetcher.manifest (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\pacote\lib\registry.js:128:23)
+52 verbose stack     at async #fetchManifest (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:1227:20)
+52 verbose stack     at async #nodeFromEdge (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:1061:19)
+52 verbose stack     at async #buildDepStep (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:917:11)
+52 verbose stack     at async Arborist.buildIdealTree (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:170:7)
+52 verbose stack     at async Promise.all (index 1)
+52 verbose stack     at async Arborist.reify (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\reify.js:110:5)
+53 error code EPERM
+54 error syscall unlink
+55 error path D:\文件\网站\strueauto.com\MemFlow\agent-service\.npm-cache\_cacache\tmp\6417c51e
+56 error errno EPERM
+57 error FetchError: Invalid response body while trying to fetch https://registry.npmjs.org/@types%2fexpress: EPERM: operation not permitted, unlink 'D:\文件\网站\strueauto.com\MemFlow\agent-service\.npm-cache\_cacache\tmp\6417c51e'
+57 error     at C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\minipass-fetch\lib\body.js:174:15
+57 error     at async Response.json (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\minipass-fetch\lib\body.js:75:17)
+57 error     at async RegistryFetcher.packument (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\pacote\lib\registry.js:98:25)
+57 error     at async RegistryFetcher.manifest (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\pacote\lib\registry.js:128:23)
+57 error     at async #fetchManifest (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:1227:20)
+57 error     at async #nodeFromEdge (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:1061:19)
+57 error     at async #buildDepStep (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:917:11)
+57 error     at async Arborist.buildIdealTree (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:170:7)
+57 error     at async Promise.all (index 1)
+57 error     at async Arborist.reify (C:\Users\12989\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\reify.js:110:5) {
+57 error   code: 'EPERM',
+57 error   errno: 'EPERM',
+57 error   syscall: 'unlink',
+57 error   path: 'D:\\文件\\网站\\strueauto.com\\MemFlow\\agent-service\\.npm-cache\\_cacache\\tmp\\6417c51e',
+57 error   type: 'system',
+57 error   requiredBy: '.'
+57 error }
+58 error
+58 error The operation was rejected by your operating system.
+58 error It's possible that the file was already in use (by a text editor or antivirus),
+58 error or that you lack permissions to access it.
+58 error
+58 error If you believe this might be a permissions issue, please double-check the
+58 error permissions of the file and its containing directories, or try running
+58 error the command again as root/Administrator.
+59 silly unfinished npm timer reify 1776245261583
+60 silly unfinished npm timer reify:loadTrees 1776245261586
+61 verbose cwd D:\文件\网站\strueauto.com\MemFlow\agent-service
+62 verbose os Windows_NT 10.0.22631
+63 verbose node v24.11.1
+64 verbose npm  v11.11.0
+65 notice
+65 notice New minor version of npm available! 11.11.0 -> 11.12.1
+65 notice Changelog: https://github.com/npm/cli/releases/tag/v11.12.1
+65 notice To update run: npm install -g npm@11.12.1
+65 notice  { force: true, Symbol(proc-log.meta): true }
+66 verbose exit 1
+67 verbose code 1
+68 error A complete log of this run can be found in: D:\文件\网站\strueauto.com\MemFlow\agent-service\.npm-cache\_logs\2026-04-15T09_27_38_191Z-debug-0.log
