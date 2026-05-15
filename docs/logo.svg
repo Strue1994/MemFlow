@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" fill="none">
+  <defs>
+    <!-- 渐变背景 -->
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a0a2e"/>
+      <stop offset="100%" stop-color="#1a0a3e"/>
+    </linearGradient>
+    <!-- 水母头部渐变 -->
+    <radialGradient id="head" cx="0.5" cy="0.4" r="0.6">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="50%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#312e81"/>
+    </radialGradient>
+    <!-- 发光 -->
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#a78bfa" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#a78bfa" stop-opacity="0"/>
+    </radialGradient>
+    <!-- 触手渐变 -->
+    <linearGradient id="tentacle1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.6"/>
+    </linearGradient>
+    <linearGradient id="tentacle2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6d28d9"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.5"/>
+    </linearGradient>
+    <linearGradient id="tentacle3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 背景圆 -->
+  <circle cx="200" cy="200" r="195" fill="url(#bg)"/>
+  <circle cx="200" cy="200" r="190" stroke="#312e81" stroke-width="1" fill="none"/>
+
+  <!-- 发光效果 -->
+  <circle cx="200" cy="160" r="90" fill="url(#glow)"/>
+
+  <!-- 触手 (13条 = 13个通道) -->
+  <!-- 左侧 6 条 -->
+  <path d="M155 220 Q140 280 130 340" stroke="url(#tentacle1)" stroke-width="2.5" fill="none" opacity="0.7"/>
+  <path d="M160 225 Q145 290 155 355" stroke="url(#tentacle2)" stroke-width="2" fill="none" opacity="0.65"/>
+  <path d="M168 228 Q150 285 140 350" stroke="url(#tentacle3)" stroke-width="2.5" fill="none" opacity="0.6"/>
+  <path d="M175 230 Q160 295 170 360" stroke="url(#tentacle1)" stroke-width="2" fill="none" opacity="0.55"/>
+  <path d="M182 232 Q165 280 158 340" stroke="url(#tentacle2)" stroke-width="2.5" fill="none" opacity="0.5"/>
+  <path d="M188 233 Q175 290 180 355" stroke="url(#tentacle3)" stroke-width="2" fill="none" opacity="0.45"/>
+
+  <!-- 右侧 6 条 -->
+  <path d="M245 220 Q260 280 270 340" stroke="url(#tentacle1)" stroke-width="2.5" fill="none" opacity="0.7"/>
+  <path d="M240 225 Q255 290 245 355" stroke="url(#tentacle2)" stroke-width="2" fill="none" opacity="0.65"/>
+  <path d="M232 228 Q250 285 260 350" stroke="url(#tentacle3)" stroke-width="2.5" fill="none" opacity="0.6"/>
+  <path d="M225 230 Q240 295 230 360" stroke="url(#tentacle1)" stroke-width="2" fill="none" opacity="0.55"/>
+  <path d="M218 232 Q235 280 242 340" stroke="url(#tentacle2)" stroke-width="2.5" fill="none" opacity="0.5"/>
+  <path d="M212 233 Q225 290 220 355" stroke="url(#tentacle3)" stroke-width="2" fill="none" opacity="0.45"/>
+
+  <!-- 中央触手 -->
+  <path d="M200 235 Q200 295 200 365" stroke="url(#tentacle1)" stroke-width="2.5" fill="none" opacity="0.75"/>
+
+  <!-- 水母头部 -->
+  <ellipse cx="200" cy="170" rx="75" ry="55" fill="url(#head)" stroke="#7c3aed" stroke-width="1.5"/>
+
+  <!-- 头部内部发光 -->
+  <ellipse cx="200" cy="160" rx="45" ry="30" fill="#a78bfa" opacity="0.12"/>
+  <ellipse cx="200" cy="155" rx="30" ry="18" fill="#c4b5fd" opacity="0.1"/>
+
+  <!-- 眼睛 -->
+  <ellipse cx="178" cy="165" rx="8" ry="10" fill="#1e1b4b"/>
+  <ellipse cx="222" cy="165" rx="8" ry="10" fill="#1e1b4b"/>
+  <ellipse cx="180" cy="163" rx="3" ry="4" fill="#e0e7ff" opacity="0.8"/>
+  <ellipse cx="224" cy="163" rx="3" ry="4" fill="#e0e7ff" opacity="0.8"/>
+
+  <!-- M 字母图形 -->
+  <path d="M175 175 L185 190 L200 178 L215 190 L225 175" stroke="#c4b5fd" stroke-width="2.5" fill="none" opacity="0.5"/>
+
+  <!-- 小发光点 -->
+  <circle cx="160" cy="150" r="2" fill="#c4b5fd" opacity="0.6"/>
+  <circle cx="240" cy="155" r="1.5" fill="#c4b5fd" opacity="0.5"/>
+  <circle cx="195" cy="135" r="1.5" fill="#a78bfa" opacity="0.4"/>
+  <circle cx="210" cy="140" r="2" fill="#a78bfa" opacity="0.5"/>
+
+  <!-- 底部文字 -->
+  <text x="200" y="385" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="bold" fill="#a78bfa" letter-spacing="4">MEMFLOW</text>
+  <text x="200" y="398" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#6b7280" letter-spacing="6">AI AGENT PLATFORM</text>
+</svg>

@@ -1,4 +1,8 @@
-# MemFlow
+# 🪸 MemFlow
+
+<p align="center">
+  <img src="docs/logo.svg" width="200" height="200" alt="MemFlow Logo">
+</p>
 
 **Workflow-first AI Agent Platform** — Rust workflow engine + TypeScript agent runtime + multi-channel messaging + self-learning skills.
 
