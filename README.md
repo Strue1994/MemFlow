@@ -13,7 +13,7 @@ MemFlow is an open-source AI agent platform that combines a high-performance Rus
 ### 🚀 One-command install (like `openclaw` / `hermes`)
 
 ```bash
-npx @memflow/cli
+npx memflow-cli
 ```
 
 This will:
