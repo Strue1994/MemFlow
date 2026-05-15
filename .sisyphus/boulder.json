@@ -1,7 +1,9 @@
 {
-  "active_plan": "D:\\文件\\网站\\strueauto.com\\MemFlow\\.sisyphus\\memflow-upgrade-plan.md",
-  "started_at": "2026-05-13T15:45:41.267Z",
-  "session_ids": ["ses_1ded0b992ffe4IcLJ5VCcGVrsX"],
-  "plan_name": "memflow-upgrade-plan",
+  "active_plan": "D:\\文件\\网站\\strueauto.com\\MemFlow\\.sisyphus\\plans\\memflow-upgrade-roadmap.md",
+  "started_at": "2026-05-15T10:48:58.6128796+08:00",
+  "plan_name": "memflow-upgrade-roadmap",
+  "session_ids": [
+    "ses_1ded0b992ffe4IcLJ5VCcGVrsX"
+  ],
   "worktree_path": null
 }

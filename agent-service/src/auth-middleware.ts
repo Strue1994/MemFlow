@@ -14,7 +14,7 @@ export interface AuthConfig {
 const config: AuthConfig = {
   jwtSecret: process.env.JWT_SECRET,
   apiKeys: (process.env.API_KEYS || "").split(",").filter(Boolean),
-  enabled: process.env.AUTH_ENABLED === "true",
+  enabled: process.env.AUTH_ENABLED !== "false",
 };
 
 export interface AuthenticatedRequest extends Request {
@@ -55,6 +55,14 @@ function verifyJWT(token: string, secret: string): Record<string, any> | null {
 
 export function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
   if (!config.enabled) { next(); return; }
+
+  const publicPaths = new Set([
+    "/health",
+    "/ready",
+    "/live",
+    "/setup/status",
+  ]);
+  if (publicPaths.has(req.path)) { next(); return; }
 
   const authHeader = req.headers.authorization;
   if (!authHeader) {

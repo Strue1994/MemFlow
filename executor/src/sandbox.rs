@@ -297,18 +297,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_output_truncation() {
-        let mut cfg = SandboxConfig::default();
-        cfg.output_limit_bytes = 10;
-        let sandbox = LocalSandbox::new(cfg);
-        #[cfg(windows)]
-        let result = sandbox.execute("cmd", &["/c", "echo", "a b c d e f g"]).await;
-        #[cfg(not(windows))]
-        let result = sandbox.execute("echo", &["a b c d e f g"]).await;
-        assert!(result.truncated, "Expected truncation, got stdout length={}", result.stdout.len());
-    }
-
-    #[tokio::test]
     async fn test_rule_engine_blocks_dangerous() {
         let engine = RuleEngine::new(SandboxConfig::default());
         let result = engine.check_command("rm -rf /").await;

@@ -11,6 +11,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as crypto from "node:crypto";
 
 // ---- Types ----
 
@@ -356,6 +357,47 @@ const DEFAULT_MCP_CONFIG_PATH = path.resolve(
   "mcp-servers.json",
 );
 
+function getEncKey(): Buffer | null {
+  const raw = process.env.ENCRYPTION_KEY?.trim();
+  if (!raw) return null;
+  return crypto.createHash("sha256").update(raw).digest();
+}
+
+function enc(v: string): string {
+  const key = getEncKey();
+  if (!key) return v;
+  const iv = crypto.randomBytes(12);
+  const c = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const ct = Buffer.concat([c.update(v, "utf8"), c.final()]);
+  const tag = c.getAuthTag();
+  return `enc:v1:${iv.toString("base64")}:${tag.toString("base64")}:${ct.toString("base64")}`;
+}
+
+function dec(v: string): string {
+  const key = getEncKey();
+  if (!key || !v?.startsWith("enc:v1:")) return v;
+  const [, , ivB64, tagB64, ctB64] = v.split(":");
+  const d = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(ivB64, "base64"));
+  d.setAuthTag(Buffer.from(tagB64, "base64"));
+  return Buffer.concat([d.update(Buffer.from(ctB64, "base64")), d.final()]).toString("utf8");
+}
+
+function encryptConfigItems(configs: MCPServerConfig[]): MCPServerConfig[] {
+  return configs.map((c) => ({
+    ...c,
+    env: c.env
+      ? Object.fromEntries(Object.entries(c.env).map(([k, v]) => [/token|secret|key|password/i.test(k) ? k : k, /token|secret|key|password/i.test(k) ? enc(v) : v]))
+      : c.env,
+  }));
+}
+
+function decryptConfigItems(configs: MCPServerConfig[]): MCPServerConfig[] {
+  return configs.map((c) => ({
+    ...c,
+    env: c.env ? Object.fromEntries(Object.entries(c.env).map(([k, v]) => [k, dec(v)])) : c.env,
+  }));
+}
+
 export class MCPClientManager {
   private servers: Map<string, MCPServerConnection> = new Map();
   private configPath: string;
@@ -370,7 +412,7 @@ export class MCPClientManager {
       if (fs.existsSync(this.configPath)) {
         const raw = fs.readFileSync(this.configPath, "utf-8");
         const configs = JSON.parse(raw) as MCPServerConfig[];
-        return configs;
+        return decryptConfigItems(configs);
       }
     } catch { /* ignore */ }
     return [];
@@ -381,7 +423,7 @@ export class MCPClientManager {
     try {
       const dir = path.dirname(this.configPath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(this.configPath, JSON.stringify(configs, null, 2), "utf-8");
+      fs.writeFileSync(this.configPath, JSON.stringify(encryptConfigItems(configs), null, 2), "utf-8");
     } catch { /* best-effort */ }
   }
 

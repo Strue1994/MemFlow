@@ -7,9 +7,28 @@ import type { Tool } from './agent-loop';
 import { globalMCPManager, type MCPTool as MCPToolType } from './mcp-client';
 
 export function createExecutorTools(executorUrl: string, apiKey: string): Tool[] {
+  const retryFetch = async (url: string, init: RequestInit, retries = 3): Promise<Response> => {
+    const backoff = [100, 500, 2000];
+    let lastErr: any;
+    for (let i = 0; i < retries; i++) {
+      try {
+        const resp = await fetch(url, init);
+        if (resp.status >= 500 && i < retries - 1) {
+          await new Promise((r) => setTimeout(r, backoff[i] || 2000));
+          continue;
+        }
+        return resp;
+      } catch (e) {
+        lastErr = e;
+        if (i < retries - 1) await new Promise((r) => setTimeout(r, backoff[i] || 2000));
+      }
+    }
+    throw lastErr || new Error("fetch failed");
+  };
+
   const exec = async (path: string, body: any): Promise<string> => {
     try {
-      const resp = await fetch(`${executorUrl}${path}`, {
+      const resp = await retryFetch(`${executorUrl}${path}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -61,6 +80,25 @@ export function createExecutorTools(executorUrl: string, apiKey: string): Tool[]
 }
 
 export function createMemoryTools(memoryHubUrl: string): Tool[] {
+  const retryFetch = async (url: string, init: RequestInit, retries = 3): Promise<Response> => {
+    const backoff = [100, 500, 2000];
+    let lastErr: any;
+    for (let i = 0; i < retries; i++) {
+      try {
+        const resp = await fetch(url, init);
+        if (resp.status >= 500 && i < retries - 1) {
+          await new Promise((r) => setTimeout(r, backoff[i] || 2000));
+          continue;
+        }
+        return resp;
+      } catch (e) {
+        lastErr = e;
+        if (i < retries - 1) await new Promise((r) => setTimeout(r, backoff[i] || 2000));
+      }
+    }
+    throw lastErr || new Error("fetch failed");
+  };
+
   const mem = async (path: string, body?: any): Promise<string> => {
     try {
       const opts: RequestInit = {
@@ -68,7 +106,7 @@ export function createMemoryTools(memoryHubUrl: string): Tool[] {
         headers: { 'Content-Type': 'application/json' },
       };
       if (body) opts.body = JSON.stringify(body);
-      const resp = await fetch(`${memoryHubUrl}${path}`, opts);
+      const resp = await retryFetch(`${memoryHubUrl}${path}`, opts);
       if (!resp.ok) return `HTTP ${resp.status}`;
       return JSON.stringify(await resp.json(), null, 2);
     } catch (err: any) {

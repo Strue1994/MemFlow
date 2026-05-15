@@ -1,4 +1,5 @@
 import express, { Request, Response as ExpressResponse, NextFunction } from "express";
+import cors from "cors";
 import { getWorkflow, listWorkflows, Workflow } from "./workflowRegistry";
 import { attachAutonomyRoutes } from "./autonomy_supervisor";
 import { attachComputerRoutes } from "./computer_agent";
@@ -30,6 +31,12 @@ import { globalTracer, traceAgent } from "./tracing";
 import { runScan } from "./security-scanner";
 import { GatewayBridge } from "./gateway-bridge";
 import { authMiddleware } from "./auth-middleware";
+import { rateLimiter } from "./rate-limiter";
+import { validateAgentExecuteBody, validateChatCompletionsBody, validateCheckpointSaveBody } from "./validate";
+import { createBackup, restoreBackup } from "./backup";
+import { logger } from "./logger";
+import { httpRequestsTotal, agentExecuteDuration, activeSessions, mcpConnectionsActive, metricsText } from "./metrics";
+import { setGoal, getActiveGoal, completeGoal, updateGoalProgress, formatGoalPrompt, listGoals } from "./goal-loop";
 
 function sanitizeServiceBaseUrl(value: string): string {
   return value.trim().replace(/\s+/g, "").replace(/\/+$/, "");
@@ -294,9 +301,51 @@ if (mcpTransport === "sse" || mcpTransport === "stdio") {
 export function createApp(deps: AppDependencies = {}) {
   const app = express();
   const taskEntryDeps = createTaskEntryDeps(deps);
+  app.use(cors({ origin: process.env.CORS_ORIGIN || "http://localhost:3000" }));
   app.use(express.json({ limit: "1mb" }));
-app.use(authMiddleware);
   app.use(express.urlencoded({ limit: "1mb", extended: false }));
+
+  // request metrics + lightweight logging
+  app.use((req, res, next) => {
+    const started = Date.now();
+    res.on("finish", () => {
+      const ms = Date.now() - started;
+      httpRequestsTotal.inc({ method: req.method, path: req.path, status: String(res.statusCode) });
+      logger.info({ method: req.method, path: req.path, status: res.statusCode, duration_ms: ms }, "http_request");
+    });
+    next();
+  });
+
+  // rate limiter before auth to protect auth path itself
+  app.use(rateLimiter);
+  app.use(authMiddleware);
+
+  // health probes
+  app.get("/health", (_req, res) => {
+    res.json({ status: "ok", uptime_s: Math.floor(process.uptime()) });
+  });
+
+  app.get("/live", (_req, res) => {
+    res.json({ live: true });
+  });
+
+  app.get("/ready", async (_req, res) => {
+    try {
+      const [ex, mem] = await Promise.all([
+        fetch(`${EXECUTOR_URL}/health`, { method: "GET" }).then((r) => r.ok).catch(() => false),
+        fetch(`${MEMORY_HUB_URL}/stats`, { method: "GET" }).then((r) => r.ok).catch(() => false),
+      ]);
+      if (ex && mem) return res.json({ ready: true, executor: true, memory_hub: true });
+      res.status(503).json({ ready: false, executor: ex, memory_hub: mem });
+    } catch {
+      res.status(503).json({ ready: false });
+    }
+  });
+
+  app.get("/metrics", async (_req, res) => {
+    res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+    res.send(await metricsText());
+  });
 
   app.get("/llm-settings", async (_req, res) => {
     try {
@@ -543,6 +592,9 @@ Respond with JSON only: { "workflowId": "string", "params": { ... } }`,
 
   app.post("/agent/execute", async (req, res) => {
     try {
+      const t0 = Date.now();
+      const errBody = validateAgentExecuteBody(req.body);
+      if (errBody) { res.status(400).json({ error: errBody }); return; }
       const { text, stream } = req.body as { text: string; stream?: boolean };
       if (!text) { res.status(400).json({ error: "text is required" }); return; }
 
@@ -585,6 +637,8 @@ Respond with JSON only: { "workflowId": "string", "params": { ... } }`,
         timestamp: new Date().toISOString(),
       });
 
+      agentExecuteDuration.observe((Date.now() - t0) / 1000);
+
       res.json(result);
     } catch (e) { res.status(500).json({ error: (e instanceof Error ? e.message : String(e)) }); }
   });
@@ -615,6 +669,8 @@ Respond with JSON only: { "workflowId": "string", "params": { ... } }`,
   // OpenAI-compatible API (Hermes/OpenClaw-aligned)
   app.post("/v1/chat/completions", async (req, res) => {
     try {
+      const errBody = validateChatCompletionsBody(req.body);
+      if (errBody) { res.status(400).json({ error: errBody }); return; }
       const { model, messages, stream } = req.body as any;
       if (!messages) { res.status(400).json({ error: "messages required" }); return; }
       const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
@@ -708,6 +764,8 @@ Respond with JSON only: { "workflowId": "string", "params": { ... } }`,
 
   app.post("/checkpoints/save", (req, res) => {
     try {
+      const errBody = validateCheckpointSaveBody(req.body);
+      if (errBody) { res.status(400).json({ error: errBody }); return; }
       const { sessionId, messages } = req.body as { sessionId: string; messages: any[] };
       if (!sessionId || !messages) { res.status(400).json({ error: "sessionId and messages required" }); return; }
       const ck = checkpoints.saveCheckpoint(sessionId, messages);
@@ -720,6 +778,25 @@ Respond with JSON only: { "workflowId": "string", "params": { ... } }`,
       const ok = checkpoints.deleteSession(req.params.sessionId);
       res.json({ deleted: ok });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/backup", (_req, res) => {
+    try {
+      const out = createBackup();
+      res.json(out);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/backup/restore", (req, res) => {
+    try {
+      const { path } = req.body as { path?: string };
+      if (!path) { res.status(400).json({ error: "path required" }); return; }
+      res.json(restoreBackup(path));
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   // ---- Middleware Chain API ----
@@ -889,6 +966,7 @@ Respond with JSON only: { "workflowId": "string", "params": { ... } }`,
   app.get("/traces", (_req, res) => {
     try {
       const sessions = globalTracer.listSessions();
+      activeSessions.set(sessions.length);
       res.json({ sessions: sessions.length, sessionIds: sessions.slice(-20) });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
@@ -1012,6 +1090,7 @@ Respond with JSON only: { "workflowId": "string", "params": { ... } }`,
         transport: c.config.transport,
         tools: c.tools.map((t) => ({ name: t.name, description: t.description })),
       }));
+      mcpConnectionsActive.set(connections.length);
       res.json({ configs, connections });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
@@ -1047,6 +1126,38 @@ Respond with JSON only: { "workflowId": "string", "params": { ... } }`,
     try {
       globalMCPManager.disconnect(req.params.name);
       res.json({ status: "disconnected", name: req.params.name });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ---- Goal Loop API ----
+  app.get("/goal", (_req, res) => {
+    try {
+      const active = getActiveGoal();
+      const all = listGoals();
+      res.json({ active, all });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/goal/set", (req, res) => {
+    try {
+      const { text } = req.body as { text: string };
+      if (!text) { res.status(400).json({ error: "text required" }); return; }
+      const goal = setGoal(text);
+      res.json({ goal });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/goal/complete", (_req, res) => {
+    try {
+      const goal = completeGoal();
+      res.json({ goal });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/goal/prompt", (_req, res) => {
+    try {
+      const prompt = formatGoalPrompt();
+      res.json({ prompt });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
@@ -1090,23 +1201,34 @@ if (require.main === module) {
       }
     } catch { /* best-effort */ }
 
-    app.listen(PORT, () => {
-      console.log(`Agent service ready at http://127.0.0.1:${PORT}`);
-      console.log(`Executor URL: ${EXECUTOR_URL}`);
-      console.log(`Executor API key configured: ${EXECUTOR_API_KEY ? "yes" : "no"}`);
-      console.log(`OpenAI API key configured: ${llmSettings.apiKey ? "yes" : "no"}`);
-      console.log(`OpenAI base URL configured: ${llmSettings.baseUrl ? llmSettings.baseUrl : "default"}`);
-      console.log(`OpenAI model: ${llmSettings.model}`);
+    const server = app.listen(PORT, () => {
+      logger.info({ port: PORT }, `Agent service ready at http://127.0.0.1:${PORT}`);
+      logger.info({ executorUrl: EXECUTOR_URL, hasExecutorApiKey: !!EXECUTOR_API_KEY }, "executor config");
+      logger.info({ hasOpenAiKey: !!llmSettings.apiKey, baseUrl: llmSettings.baseUrl || "default", model: llmSettings.model }, "llm config");
       if (setupStatus.needsSetup) {
-        console.log("⚠  Setup required: no LLM providers configured.");
-        console.log("   → GET /setup/status to see available templates");
-        console.log("   → POST /providers to add API keys");
-        console.log("   → POST /channels to configure messaging platforms");
+        logger.warn("Setup required: no LLM providers configured. Use /setup/status then /providers and /channels.");
       } else {
-        console.log(`✓ ${setupStatus.enabledProviders} provider(s) configured: ${setupStatus.providers.join(", ")}`);
-        if (setupStatus.channels.length > 0) console.log(`✓ ${setupStatus.channels.length} channel(s) active: ${setupStatus.channels.join(", ")}`);
+        logger.info({ providers: setupStatus.providers, channels: setupStatus.channels }, "setup status");
       }
     });
+
+    const shutdown = async (signal: string) => {
+      logger.warn({ signal }, "graceful shutdown start");
+      try {
+        globalMCPManager.disconnectAll();
+      } catch {}
+      try {
+        checkpoints.saveCheckpoint("shutdown", [{ role: "system", content: `Shutdown via ${signal}` }]);
+      } catch {}
+      server.close(() => {
+        logger.info("http server closed");
+        process.exit(0);
+      });
+      setTimeout(() => process.exit(1), 10_000).unref();
+    };
+
+    process.on("SIGTERM", () => { void shutdown("SIGTERM"); });
+    process.on("SIGINT", () => { void shutdown("SIGINT"); });
   })().catch((error) => {
     console.error(error);
     process.exit(1);

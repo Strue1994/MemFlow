@@ -9,6 +9,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import * as crypto from "node:crypto";
 import { type ComplexityTier } from "./types";
 
 // ---- Types ----
@@ -121,7 +122,7 @@ async function readConfig(): Promise<ConfigFile> {
 
   try {
     const raw = await fs.readFile(getConfigPath(), "utf8");
-    cachedConfig = JSON.parse(raw) as ConfigFile;
+    cachedConfig = decryptConfig(JSON.parse(raw) as ConfigFile);
     return cachedConfig;
   } catch {
     // First run: import from env vars
@@ -143,7 +144,63 @@ async function writeConfig(cfg: ConfigFile): Promise<void> {
   cfg.updatedAt = new Date().toISOString();
   cachedConfig = cfg;
   await fs.mkdir(getConfigDir(), { recursive: true });
-  await fs.writeFile(getConfigPath(), JSON.stringify(cfg, null, 2), "utf8");
+  await fs.writeFile(getConfigPath(), JSON.stringify(encryptConfig(cfg), null, 2), "utf8");
+}
+
+function getEncKey(): Buffer | null {
+  const raw = process.env.ENCRYPTION_KEY?.trim();
+  if (!raw) return null;
+  // derive 32-byte key
+  return crypto.createHash("sha256").update(raw).digest();
+}
+
+function enc(value: string): string {
+  const key = getEncKey();
+  if (!key) return value;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const ct = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `enc:v1:${iv.toString("base64")}:${tag.toString("base64")}:${ct.toString("base64")}`;
+}
+
+function dec(value: string): string {
+  const key = getEncKey();
+  if (!key) return value;
+  if (!value.startsWith("enc:v1:")) return value;
+  const [, , ivB64, tagB64, ctB64] = value.split(":");
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(ivB64, "base64"));
+  decipher.setAuthTag(Buffer.from(tagB64, "base64"));
+  const pt = Buffer.concat([decipher.update(Buffer.from(ctB64, "base64")), decipher.final()]);
+  return pt.toString("utf8");
+}
+
+function encryptConfig(cfg: ConfigFile): ConfigFile {
+  return {
+    ...cfg,
+    providers: cfg.providers.map((p) => ({ ...p, apiKey: p.apiKey ? enc(p.apiKey) : p.apiKey })),
+    channels: cfg.channels.map((c) => ({
+      ...c,
+      config: Object.fromEntries(Object.entries(c.config || {}).map(([k, v]) => {
+        const sensitive = /token|secret|key|password|passwd/i.test(k);
+        return [k, sensitive && typeof v === "string" ? enc(v) : v];
+      })),
+    })),
+  };
+}
+
+function decryptConfig(cfg: ConfigFile): ConfigFile {
+  return {
+    ...cfg,
+    providers: cfg.providers.map((p) => ({ ...p, apiKey: p.apiKey ? dec(p.apiKey) : p.apiKey })),
+    channels: cfg.channels.map((c) => ({
+      ...c,
+      config: Object.fromEntries(Object.entries(c.config || {}).map(([k, v]) => {
+        const val = typeof v === "string" ? dec(v) : v;
+        return [k, val as string];
+      })),
+    })),
+  };
 }
 
 // ---- Import from env vars (first-run migration) ----
