@@ -16,7 +16,7 @@ import { execSync, spawn } from "node:child_process";
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const q = (p: string): Promise<string> => new Promise((r) => rl.question(p, r));
 
-const C = "\x1b[36m", G = "\x1b[32m", Y = "\x1b[33m", R = "\x1b[31m", X = "\x1b[0m", B = "\x1b[1m";
+const C = "\x1b[36m", G = "\x1b[32m", Y = "\x1b[33m", R = "\x1b[31m", X = "\x1b[0m", B = "\x1b[1m", D = "\x1b[2m";
 const log = (m: string, c = "") => console.log(`${c}${m}${X}`);
 const step = (m: string) => log(`\n>>> ${m}`, C);
 const ok = (m: string) => log(`  ${G}✓${X} ${m}`);
@@ -151,11 +151,12 @@ async function configureProviders() {
       providers.push({ id, apiKey, model, enabled: true });
       ok(`Added ${preset.label}`);
     } else if (choice === "a") {
-      const id = await q("  Custom provider id (e.g. my-llm): ");
+      log(`  ${D}Custom OpenAI-compatible provider${X}`);
+      const id = await q(`  Provider name (e.g. my-llm): `);
       if (!id) continue;
-      const baseUrl = await q("  Base URL (e.g. http://localhost:11434/v1): ");
-      const apiKey = await q("  API key: ");
-      const model = await q("  Model name: ");
+      const baseUrl = await q(`  Base URL (e.g. http://localhost:11434/v1): `);
+      const apiKey = await q(`  API key (optional): `);
+      const model = await q(`  Model name (e.g. llama3.2): `);
       providers.push({ id, apiKey, model, enabled: true });
       ok(`Added custom provider: ${id}`);
     }
@@ -190,12 +191,14 @@ async function configureChannels() {
   channels.forEach((c, i) => log(`  ${i + 1}. ${c.id}`));
 
   const choice = await q("Select channel by number: ");
-  const idx = parseInt(choice) - 1;
-  if (idx < 0 || idx >= channels.length) { warn("Invalid selection"); return; }
+  const idx = parseInt(choice);
+  if (isNaN(idx) || idx < 1 || idx > channels.length) { warn("Invalid selection"); return; }
 
-  const ch = channels[idx];
+  const ch = channels[idx - 1];
+  if (!ch) { warn("Channel not found"); return; }
+
   const config: Record<string, string> = {};
-  for (const f of ch.fields) {
+  for (const f of (ch.fields || [])) {
     config[f.key] = await q(`  ${f.label}: `) || "";
   }
 
@@ -294,6 +297,24 @@ async function main() {
   log(`  Middleware:   curl http://localhost:${port}/middleware/config`);
   log(`  Metrics:      curl http://localhost:${port}/metrics`);
   log(`  Channels:     curl http://localhost:${port}/channels`);
+
+  // ─── Optional: Web UI ───────────────────────────────
+  const webUiDir = path.resolve(process.cwd(), "..", "web-ui");
+  if (fs.existsSync(webUiDir)) {
+    const buildWebUi = await q(`\nBuild Web UI (React dashboard)? (y/N): `);
+    if (buildWebUi.toLowerCase() === "y") {
+      step("Building Web UI");
+      try {
+        execSync("npm install", { cwd: webUiDir, stdio: "inherit", timeout: 120000 });
+        execSync("npx vite build", { cwd: webUiDir, stdio: "inherit", timeout: 120000 });
+        ok("Web UI built — available at http://localhost:3000");
+      } catch (e: any) {
+        warn(`Web UI build failed: ${e.message}`);
+        log(`  ${D}Build manually: cd web-ui && npm install && npm run build${X}`);
+      }
+    }
+  }
+
   log(`\n${Y}Need help?${X}  README.md  |  DEPLOYMENT_GUIDE.md\n`);
 
   rl.close();

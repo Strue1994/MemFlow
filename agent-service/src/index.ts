@@ -321,7 +321,23 @@ export function createApp(deps: AppDependencies = {}) {
 
   // rate limiter before auth to protect auth path itself
   app.use(rateLimiter);
+
+  // Serve built web UI (from web-ui/dist/) as static files (before auth)
+  const WEB_UI_DIR = path.resolve(__dirname, "..", "..", "web-ui", "dist");
+  app.use(express.static(WEB_UI_DIR));
+
   app.use(authMiddleware);
+
+  // SPA fallback for web UI (only if auth passes OR endpoint is public)
+  const fs = require("fs");
+  app.get(/^\/(?!api\/|health|ready|live|skills|providers|channels|agent\/|v1\/|checkpoints|curator|middleware|marketplace|metrics|goals|backup|restore|setup|status)/, (req, res, next) => {
+    const indexPath = path.join(WEB_UI_DIR, "index.html");
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      next();
+    }
+  });
 
   // health probes
   app.get("/health", (_req, res) => {
