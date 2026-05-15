@@ -12,10 +12,22 @@ import { decideTaskRoute } from "./task_router/router";
 import { FileWorkflowMetadataStore } from "./task_router/workflow_metadata_store";
 import type { HistoricalTaskRecord, WorkflowAssetMetadata } from "./task_router/types";
 import path from "node:path";
-import { createAgentLoop } from "./agent-loop";
+import runAgent from "./agent-loop";
 import { createExecutorTools, createMemoryTools, createSkillTools } from "./agent-tools";
 import { SkillManager } from "./skill-system";
 import { MCPServer } from "./mcp-server";
+import { getRouterConfig, setRouterConfig, globalCostTracker, getConfiguredProviders } from "./llm_router";
+import { getSetupStatus as getProvSetupStatus } from "./provider-config";
+import { scanSkillFiles, loadSkillFile, importSkillsFromDir, discoverAllSkills } from "./skill-loader";
+import { globalMCPManager, type MCPServerConfig } from "./mcp-client";
+import { globalCurator } from "./curator";
+import { compressContext } from "./context-compressor";
+import { runBeforePipeline, runAfterPipeline, globalMiddleware, type MiddlewareContext } from "./middleware-chain";
+import * as checkpoints from "./checkpoints";
+import * as marketplace from "./marketplace";
+import * as agentConfig from "./agent-config";
+import { globalTracer, traceAgent } from "./tracing";
+import { runScan } from "./security-scanner";
 import { GatewayBridge } from "./gateway-bridge";
 import { authMiddleware } from "./auth-middleware";
 
@@ -531,17 +543,48 @@ Respond with JSON only: { "workflowId": "string", "params": { ... } }`,
 
   app.post("/agent/execute", async (req, res) => {
     try {
-      const { text } = req.body as { text: string };
+      const { text, stream } = req.body as { text: string; stream?: boolean };
       if (!text) { res.status(400).json({ error: "text is required" }); return; }
-      const loop = await createAgentLoop();
+
+      // Tracing
+      const sessionId = `session_${Date.now()}`;
+      const traceSpan = traceAgent(sessionId, text);
+
       const exTools = createExecutorTools(EXECUTOR_URL, EXECUTOR_API_KEY);
-      const memTools = createMemoryTools(MEMORY_HUB_URL);
-      for (const t of [...exTools, ...memTools, ...createSkillTools()]) { loop.addTool(t); }
-      const result = await loop.run(text);
-      if (result.success) {
-        const sm = new SkillManager();
-        sm.generateSkill({ workflowId: "agent_"+Date.now(), taskText: text, steps: [], success: true, durationMs: 0, timestamp: new Date().toISOString() });
+
+      // Run before middleware pipeline
+      const ctx: MiddlewareContext = {
+        text,
+        messages: [],
+        tools: exTools,
+        stream,
+        meta: { sessionId },
+      };
+      const { modifiedCtx, earlyResponse } = await runBeforePipeline(ctx);
+      if (earlyResponse) {
+        globalTracer.completeSpan(traceSpan, earlyResponse);
+        res.json({ success: true, output: earlyResponse, middleware: true });
+        return;
       }
+
+      const result = await runAgent(modifiedCtx.text, { tools: modifiedCtx.tools, stream: modifiedCtx.stream });
+      globalTracer.completeSpan(traceSpan, result.output || "", result.error);
+
+      // Run after middleware pipeline
+      if (result.success && result.output) {
+        result.output = await runAfterPipeline(modifiedCtx, result.output);
+      }
+
+      // Record execution for curator self-learning
+      globalCurator.recordExecution({
+        workflowId: "agent_" + Date.now(),
+        taskText: text,
+        steps: result.output ? ["Agent processed"] : [],
+        success: result.success,
+        durationMs: 0,
+        timestamp: new Date().toISOString(),
+      });
+
       res.json(result);
     } catch (e) { res.status(500).json({ error: (e instanceof Error ? e.message : String(e)) }); }
   });
@@ -569,6 +612,444 @@ Respond with JSON only: { "workflowId": "string", "params": { ... } }`,
     } catch (e) { res.status(500).json({ error: (e instanceof Error ? e.message : String(e)) }); }
   });
 
+  // OpenAI-compatible API (Hermes/OpenClaw-aligned)
+  app.post("/v1/chat/completions", async (req, res) => {
+    try {
+      const { model, messages, stream } = req.body as any;
+      if (!messages) { res.status(400).json({ error: "messages required" }); return; }
+      const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
+      if (!lastUserMsg) { res.status(400).json({ error: "no user message" }); return; }
+      const result = await runAgent(lastUserMsg.content, { stream });
+      if (stream) {
+        res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+        res.write("data: " + JSON.stringify({ choices: [{ delta: { content: result.output }, index: 0 }] }) + "\n\n");
+        res.write("data: [DONE]\n");
+        res.end();
+      } else {
+        res.json({
+          id: "chatcmpl-" + Date.now(),
+          object: "chat.completion",
+          model: model || result.model,
+          choices: [{ message: { role: "assistant", content: result.output }, index: 0 }],
+          usage: { prompt_tokens: result.tokensUsed.input, completion_tokens: result.tokensUsed.output },
+        });
+      }
+    } catch (e) { res.status(500).json({ error: (e instanceof Error ? e.message : String(e)) }); }
+  });
+
+  // ---- Smart Router API ----
+  app.get("/router/config", (_req, res) => {
+    res.json({ config: getRouterConfig(), providers: getConfiguredProviders() });
+  });
+
+  app.post("/router/config", (req, res) => {
+    const cfg = setRouterConfig(req.body);
+    res.json({ config: cfg });
+  });
+
+  app.get("/router/stats", (_req, res) => {
+    res.json(globalCostTracker.getStats());
+  });
+
+  // ---- Curator API (Self-Learning Loop) ----
+  app.post("/curator/run", async (_req, res) => {
+    try {
+      const report = await globalCurator.runCycle();
+      res.json({ report });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/curator/status", (_req, res) => {
+    try {
+      res.json(globalCurator.getStatus());
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/curator/history", (_req, res) => {
+    try {
+      res.json({ records: globalCurator.getExecutionHistory().slice(-20) });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ---- Context Compression API ----
+  app.post("/compact", async (req, res) => {
+    try {
+      const { messages } = req.body as { messages?: any[] };
+      if (!messages || !Array.isArray(messages)) {
+        res.status(400).json({ error: "messages array required" });
+        return;
+      }
+      const result = await compressContext(messages);
+      res.json({
+        messages: result.messages,
+        results: result.results,
+        savings: result.results.reduce((s, r) => s + r.savings, 0),
+      });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ---- Checkpoints API (Hermes-aligned state persistence) ----
+  app.get("/checkpoints", (_req, res) => {
+    try {
+      const all = checkpoints.listCheckpoints();
+      const stats = checkpoints.getStorageStats();
+      res.json({ checkpoints: all, stats, hasResumable: checkpoints.hasResumableSession() });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/checkpoints/latest", (req, res) => {
+    try {
+      const sessionId = (req.query as any).sessionId || undefined;
+      const ck = checkpoints.getLatestCheckpoint(sessionId);
+      if (!ck) { res.status(404).json({ error: "no checkpoint found" }); return; }
+      res.json({ checkpoint: ck });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/checkpoints/save", (req, res) => {
+    try {
+      const { sessionId, messages } = req.body as { sessionId: string; messages: any[] };
+      if (!sessionId || !messages) { res.status(400).json({ error: "sessionId and messages required" }); return; }
+      const ck = checkpoints.saveCheckpoint(sessionId, messages);
+      res.json({ checkpoint: ck });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/checkpoints/:sessionId", (req, res) => {
+    try {
+      const ok = checkpoints.deleteSession(req.params.sessionId);
+      res.json({ deleted: ok });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ---- Middleware Chain API ----
+  app.get("/middleware/config", (_req, res) => {
+    try {
+      const middlewares = globalMiddleware.list().map((mw) => ({
+        name: mw.name,
+        description: mw.description,
+        enabled: mw.enabled,
+        priority: mw.priority,
+      }));
+      res.json({ middlewares });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/middleware/config/:name/toggle", (req, res) => {
+    try {
+      globalMiddleware.enable(req.params.name, req.body?.enabled !== false);
+      const mw = globalMiddleware.get(req.params.name);
+      res.json({ name: req.params.name, enabled: mw?.enabled ?? false });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ---- Subagent API (proxied to executor) ----
+  app.post("/subagents/spawn", async (req, res) => {
+    try {
+      const resp = await fetch(`${EXECUTOR_URL}/subagents/spawn`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-API-Key": EXECUTOR_API_KEY },
+        body: JSON.stringify(req.body),
+      });
+      const data = resp.ok ? await resp.json() : { error: await resp.text() };
+      res.status(resp.status).json(data);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/subagents/:id/status", async (req, res) => {
+    try {
+      const resp = await fetch(`${EXECUTOR_URL}/subagents/${req.params.id}/status`, {
+        headers: { "X-API-Key": EXECUTOR_API_KEY },
+      });
+      const data = resp.ok ? await resp.json() : { error: await resp.text() };
+      res.status(resp.status).json(data);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/subagents/:id/cancel", async (req, res) => {
+    try {
+      const resp = await fetch(`${EXECUTOR_URL}/subagents/${req.params.id}/cancel`, {
+        method: "POST",
+        headers: { "X-API-Key": EXECUTOR_API_KEY },
+      });
+      const data = resp.ok ? await resp.json() : { error: await resp.text() };
+      res.status(resp.status).json(data);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/subagents", async (_req, res) => {
+    try {
+      const resp = await fetch(`${EXECUTOR_URL}/subagents`, {
+        headers: { "X-API-Key": EXECUTOR_API_KEY },
+      });
+      const data = resp.ok ? await resp.json() : { error: await resp.text() };
+      res.status(resp.status).json(data);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ---- Sandbox API (proxied to executor) ----
+  app.get("/sandbox/config", async (_req, res) => {
+    try {
+      const resp = await fetch(`${EXECUTOR_URL}/sandbox/config`, {
+        headers: { "X-API-Key": EXECUTOR_API_KEY },
+      });
+      const data = resp.ok ? await resp.json() : { error: await resp.text() };
+      res.status(resp.status).json(data);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/sandbox/config", async (req, res) => {
+    try {
+      const resp = await fetch(`${EXECUTOR_URL}/sandbox/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-API-Key": EXECUTOR_API_KEY },
+        body: JSON.stringify(req.body),
+      });
+      const data = resp.ok ? await resp.json() : { error: await resp.text() };
+      res.status(resp.status).json(data);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/sandbox/execute", async (req, res) => {
+    try {
+      const resp = await fetch(`${EXECUTOR_URL}/sandbox/execute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-API-Key": EXECUTOR_API_KEY },
+        body: JSON.stringify(req.body),
+      });
+      const data = resp.ok ? await resp.json() : { error: await resp.text() };
+      res.status(resp.status).json(data);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ---- Marketplace API ----
+  app.get("/marketplace/list", (_req, res) => {
+    try {
+      res.json({ listings: marketplace.listMarketplace(), installed: marketplace.getInstalled() });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/marketplace/search", (req, res) => {
+    try {
+      const q = ((req.query as any).q || "").toString();
+      res.json({ results: marketplace.searchMarketplace(q) });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/marketplace/install", async (req, res) => {
+    try {
+      const { id } = req.body as { id: string };
+      if (!id) { res.status(400).json({ error: "id required" }); return; }
+      const result = await marketplace.installSkill(id);
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/marketplace/uninstall", (req, res) => {
+    try {
+      const { id } = req.body as { id: string };
+      if (!id) { res.status(400).json({ error: "id required" }); return; }
+      const ok = marketplace.uninstallSkill(id);
+      res.json({ deleted: ok });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ---- Agent Config API ----
+  app.get("/agents/config", (_req, res) => {
+    try {
+      res.json({ agents: agentConfig.listAgentConfigs() });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/agents/config/:id", (req, res) => {
+    try {
+      const config = agentConfig.getAgentConfig(req.params.id);
+      if (!config) { res.status(404).json({ error: "agent not found" }); return; }
+      res.json({ agent: config });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/agents/config", (req, res) => {
+    try {
+      const config = req.body as agentConfig.AgentConfig;
+      if (!config.id) { res.status(400).json({ error: "agent id required" }); return; }
+      agentConfig.saveAgentConfig(config);
+      res.json({ agent: config });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/agents/config/:id", (req, res) => {
+    try {
+      const ok = agentConfig.deleteAgentConfig(req.params.id);
+      res.json({ deleted: ok });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ---- Tracing / Observability API ----
+  app.get("/traces", (_req, res) => {
+    try {
+      const sessions = globalTracer.listSessions();
+      res.json({ sessions: sessions.length, sessionIds: sessions.slice(-20) });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/traces/:sessionId", (req, res) => {
+    try {
+      const summary = globalTracer.getSummary(req.params.sessionId);
+      if (!summary) { res.status(404).json({ error: "session not found" }); return; }
+      res.json(summary);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ---- Security Scanner API ----
+  app.post("/security/scan", (req, res) => {
+    try {
+      const { dir } = req.body as { dir?: string };
+      const report = runScan(dir);
+      res.json(report);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ---- Skills Import API (SKILL.md compatibility) ----
+  app.get("/skills/imported", (_req, res) => {
+    try {
+      const sm = new SkillManager();
+      const all = discoverAllSkills(sm);
+      res.json({ skills: all, count: all.length });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/skills/import", (req, res) => {
+    try {
+      const { url, dir } = req.body as { url?: string; dir?: string };
+      const sm = new SkillManager();
+      let result: { imported: number; skills: any[] };
+
+      if (dir) {
+        result = importSkillsFromDir(dir, sm);
+      } else if (url) {
+        // URL import: download SKILL.md, load it
+        res.status(400).json({ error: "URL import not yet implemented, use dir for local paths" });
+        return;
+      } else {
+        // Auto-discover from all search paths
+        result = { imported: 0, skills: discoverAllSkills(sm) };
+        result.imported = result.skills.length;
+      }
+
+      res.json({ imported: result.imported, count: result.skills.length, skills: result.skills });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ---- Provider Config API ----
+  const {
+    getProviders, addOrUpdateProvider, removeProvider, getSetupStatus,
+    getProviderTemplates, getChannels, addOrUpdateChannel, removeChannel, getChannelTemplates,
+  } = require("./provider-config");
+
+  // Setup status (first-run wizard)
+  app.get("/setup/status", async (_req, res) => {
+    try {
+      const status = await getSetupStatus();
+      res.json({
+        status,
+        providerTemplates: getProviderTemplates(),
+        channelTemplates: getChannelTemplates(),
+      });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // Provider management
+  app.get("/providers", async (_req, res) => {
+    try { res.json({ providers: await getProviders() }); }
+    catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/providers", async (req, res) => {
+    try {
+      const { id, ...updates } = req.body;
+      if (!id) { res.status(400).json({ error: "provider id required" }); return; }
+      const provider = await addOrUpdateProvider(id, updates);
+      res.json({ provider });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/providers/:id", async (req, res) => {
+    try {
+      const ok = await removeProvider(req.params.id);
+      res.json({ deleted: ok });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // Channel management
+  app.get("/channels", async (_req, res) => {
+    try { res.json({ channels: await getChannels() }); }
+    catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/channels", async (req, res) => {
+    try {
+      const { id, ...updates } = req.body;
+      if (!id) { res.status(400).json({ error: "channel id required" }); return; }
+      const channel = await addOrUpdateChannel(id, updates);
+      res.json({ channel });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/channels/:id", async (req, res) => {
+    try {
+      const ok = await removeChannel(req.params.id);
+      res.json({ deleted: ok });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ---- MCP Client API ----
+  app.get("/mcp/servers", (_req, res) => {
+    try {
+      const configs = globalMCPManager.getConfigs();
+      const connections = globalMCPManager.getConnections().map((c) => ({
+        name: c.config.name,
+        transport: c.config.transport,
+        tools: c.tools.map((t) => ({ name: t.name, description: t.description })),
+      }));
+      res.json({ configs, connections });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/mcp/servers", (req, res) => {
+    try {
+      const config = req.body as MCPServerConfig;
+      if (!config.name || !config.transport) {
+        res.status(400).json({ error: "name and transport required" });
+        return;
+      }
+      globalMCPManager.register(config);
+      // Don't auto-connect — connect explicitly via POST /mcp/servers/:name/connect
+      res.json({ status: "registered", name: config.name });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/mcp/servers/:name", (req, res) => {
+    try {
+      const ok = globalMCPManager.unregister(req.params.name);
+      res.json({ deleted: ok });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/mcp/servers/:name/connect", async (req, res) => {
+    try {
+      await globalMCPManager.connect(req.params.name);
+      res.json({ status: "connected", name: req.params.name });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/mcp/servers/:name/disconnect", (req, res) => {
+    try {
+      globalMCPManager.disconnect(req.params.name);
+      res.json({ status: "disconnected", name: req.params.name });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
   return app;
 }
 
@@ -578,18 +1059,60 @@ const PORT = process.env.PORT || 3000;
 if (require.main === module) {
   void (async () => {
     const llmSettings = await getLLMSettings();
+    const setupStatus = await getProvSetupStatus();
+
+    // Auto-import SKILL.md skills on startup
+    try {
+      const sm = new SkillManager();
+      const discovered = discoverAllSkills(sm);
+      if (discovered.length > 0) {
+        console.log(`✓ ${discovered.length} skill(s) loaded from SKILL.md files`);
+      }
+    } catch { /* best-effort */ }
+
+    // Auto-connect MCP servers
+    try {
+      const count = globalMCPManager.getConfigs().length;
+      if (count > 0) {
+        await globalMCPManager.connectAll();
+        const tools = globalMCPManager.getAllTools().length;
+        console.log(`✓ ${count} MCP server(s) connected, ${tools} tool(s) available`);
+      }
+    } catch { /* best-effort */ }
+
+    // Check for resumable sessions (Hermes auto-resume)
+    try {
+      if (checkpoints.hasResumableSession()) {
+        const lastSession = checkpoints.getLastSessionId();
+        const stats = checkpoints.getStorageStats();
+        console.log(`⚠  Resumable session found: ${lastSession} (${stats.totalCheckpoints} checkpoints, ${(stats.totalBytes / 1024).toFixed(0)}KB)`);
+        console.log("   → GET /checkpoints/latest to restore");
+      }
+    } catch { /* best-effort */ }
+
     app.listen(PORT, () => {
       console.log(`Agent service ready at http://127.0.0.1:${PORT}`);
-      console.log(`Agent service running on port ${PORT}`);
       console.log(`Executor URL: ${EXECUTOR_URL}`);
       console.log(`Executor API key configured: ${EXECUTOR_API_KEY ? "yes" : "no"}`);
       console.log(`OpenAI API key configured: ${llmSettings.apiKey ? "yes" : "no"}`);
       console.log(`OpenAI base URL configured: ${llmSettings.baseUrl ? llmSettings.baseUrl : "default"}`);
       console.log(`OpenAI model: ${llmSettings.model}`);
+      if (setupStatus.needsSetup) {
+        console.log("⚠  Setup required: no LLM providers configured.");
+        console.log("   → GET /setup/status to see available templates");
+        console.log("   → POST /providers to add API keys");
+        console.log("   → POST /channels to configure messaging platforms");
+      } else {
+        console.log(`✓ ${setupStatus.enabledProviders} provider(s) configured: ${setupStatus.providers.join(", ")}`);
+        if (setupStatus.channels.length > 0) console.log(`✓ ${setupStatus.channels.length} channel(s) active: ${setupStatus.channels.join(", ")}`);
+      }
     });
   })().catch((error) => {
     console.error(error);
     process.exit(1);
   });
 }
+
+
+
 

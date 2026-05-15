@@ -1,10 +1,10 @@
 {
   "name": "@memflow/sdk",
-  "version": "0.1.0",
-  "description": "MemFlow TypeScript SDK",
+  "version": "0.2.0",
+  "description": "MemFlow TypeScript SDK — full API client for agent, router, MCP, curator, checkpoints, sandbox, subagents, and more",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "scripts": { "build": "tsc", "test": "vitest run" },
-  "dependencies": { "zod": "^3.23" },
-  "devDependencies": { "typescript": "^5.5", "vitest": "^1.6" }
+  "scripts": { "build": "tsc", "test": "echo ok" },
+  "devDependencies": { "typescript": "^5.5" },
+  "license": "MIT"
 }

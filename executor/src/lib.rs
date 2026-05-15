@@ -43,6 +43,7 @@ pub mod aws;
 pub mod plugin_exec;
 pub mod a2a;
 pub mod security;
+pub mod sandbox;
 pub mod migrations;
 pub mod webhook_listener;
 pub mod wasm_runtime;

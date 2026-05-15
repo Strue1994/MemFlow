@@ -136,6 +136,27 @@ export class SkillManager {
     fs.writeFileSync(filePath, JSON.stringify(skill, null, 2), 'utf-8');
   }
 
+  /** Import a skill from SKILL.md external format into the manager */
+  importExternalSkill(name: string, description: string, category = 'imported'): Skill {
+    const skill: Skill = {
+      id: `ext_${name}`,
+      name,
+      description,
+      category,
+      keywords: name.split('-').concat(description.split(/\s+/).slice(0, 5)),
+      pattern: '',
+      steps: [],
+      examples: [],
+      version: '1.0.0',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      execution_count: 0,
+      success_rate: 0,
+    };
+    this.saveSkill(skill);
+    return skill;
+  }
+
   /** Export skill in markdown format (agentskills.io compatible) */
   exportToMarkdown(skill: Skill): string {
     return `# ${skill.name}

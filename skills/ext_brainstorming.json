@@ -1,0 +1,19 @@
+{
+  "id": "ext_brainstorming",
+  "name": "brainstorming",
+  "description": "Use before any creative work — creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements and design before implementation.",
+  "category": "superpowers",
+  "keywords": [
+    "brainstorming",
+    "brainstorming",
+    "brainstorming"
+  ],
+  "pattern": "",
+  "steps": [],
+  "examples": [],
+  "version": "1.0.0",
+  "created_at": "2026-05-15T02:29:24.957Z",
+  "updated_at": "2026-05-15T02:29:24.957Z",
+  "execution_count": 0,
+  "success_rate": 0
+}

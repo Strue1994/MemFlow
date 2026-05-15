@@ -1,470 +1,328 @@
-import { createClient, RedisClientType } from 'redis';
-import crypto from 'crypto';
+/**
+ * LLM Router — Hermes/OpenClaw-aligned smart provider routing
+ *
+ * Features:
+ * - Task complexity classification (simple → medium → complex → expert)
+ * - 4-tier provider selection with cost awareness
+ * - Multi-provider key discovery from env vars
+ * - Per-session cost tracking
+ * - Automatic tier escalation on repeated failures
+ */
 
-export interface LLMConfig {
-  provider: 'openai' | 'anthropic' | 'gemini' | 'local';
+// ---- Types ----
+
+import { type ComplexityTier } from "./types";
+
+export type { ComplexityTier };
+
+export interface RouterProvider {
+  id: string;          // e.g. "openai", "anthropic", "groq"
+  tier: ComplexityTier;
   model: string;
-  apiKey?: string;
-  endpoint?: string;
-  maxTokens: number;
-  temperature: number;
-  timeoutMs: number;
-  costPer1kInput: number;
-  costPer1kOutput: number;
+  baseUrl: string;
+  apiKey: string;
+  priority: number;    // lower = preferred within same tier
 }
 
-export interface TaskComplexity {
-  level: 'simple' | 'medium' | 'complex';
-  estimatedTokens: number;
-  requiredCapabilities: string[];
-}
-
-export interface LLMRequest {
-  taskType: string;
-  prompt: string;
-  maxBudget?: number;
-  maxLatency?: number;
-  context?: Record<string, unknown>;
-}
-
-export interface LLMResponse {
-  content: string;
-  model: string;
-  tokensUsed: { input: number; output: number };
-  cost: number;
-  latencyMs: number;
-  cached: boolean;
+export interface RoutingDecision {
+  tier: ComplexityTier;
+  providers: RouterProvider[];
+  reason: string;
 }
 
 export interface CostRecord {
-  timestamp: number;
+  providerId: string;
   model: string;
-  taskType: string;
   tokensIn: number;
   tokensOut: number;
   cost: number;
-  userId?: string;
 }
 
-export const DEFAULT_LLM_CONFIGS: Record<string, LLMConfig> = {
-  gpt4o: {
-    provider: 'openai',
-    model: 'gpt-4o',
-    maxTokens: 4096,
-    temperature: 0.7,
-    timeoutMs: 30000,
-    costPer1kInput: 0.005,
-    costPer1kOutput: 0.015,
-  },
-  gpt35: {
-    provider: 'openai',
-    model: 'gpt-3.5-turbo',
-    maxTokens: 4096,
-    temperature: 0.7,
-    timeoutMs: 15000,
-    costPer1kInput: 0.001,
-    costPer1kOutput: 0.002,
-  },
-  claude3opus: {
-    provider: 'anthropic',
-    model: 'claude-3-opus-20240229',
-    maxTokens: 4096,
-    temperature: 0.7,
-    timeoutMs: 30000,
-    costPer1kInput: 0.015,
-    costPer1kOutput: 0.075,
-  },
-  claude3haiku: {
-    provider: 'anthropic',
-    model: 'claude-3-haiku-20240307',
-    maxTokens: 4096,
-    temperature: 0.7,
-    timeoutMs: 10000,
-    costPer1kInput: 0.00025,
-    costPer1kOutput: 0.00125,
-  },
-  local7b: {
-    provider: 'local',
-    model: 'llama-7b',
-    endpoint: 'http://localhost:11434/api/generate',
-    maxTokens: 2048,
-    temperature: 0.7,
-    timeoutMs: 60000,
-    costPer1kInput: 0,
-    costPer1kOutput: 0,
-  },
+// Cost per 1M tokens (approximate USD, as of 2026-05)
+const MODEL_COST: Record<string, { in: number; out: number }> = {
+  // Tier 1 — cheap
+  "llama-3.3-70b":       { in: 0.59,  out: 0.79  },
+  "deepseek-v3":         { in: 0.27,  out: 1.10  },
+  "gemini-2.0-flash":    { in: 0.10,  out: 0.40  },
+  // Tier 2 — balanced
+  "gpt-4o-mini":         { in: 0.15,  out: 0.60  },
+  "claude-3.5-haiku":    { in: 0.80,  out: 4.00  },
+  // Tier 3 — powerful
+  "gpt-4o":              { in: 2.50,  out: 10.00 },
+  "claude-sonnet-4":     { in: 3.00,  out: 15.00 },
+  "gemini-2.0-pro":      { in: 1.25,  out: 5.00  },
+  // Tier 4 — expert
+  "o3-mini":             { in: 1.10,  out: 4.40  },
+  "claude-opus-4":       { in: 15.00, out: 75.00 },
 };
 
-const COMPLEXITY_PATTERNS = {
-  simple: [
-    /pattern match/i,
-    /expression/i,
-    /simple/i,
-    /basic/i,
-    /extract\s+\w+/i,
-    /format/i,
-  ],
-  medium: [
-    /generate/i,
-    /create.*workflow/i,
-    /single.*step/i,
-    /transform/i,
-    /convert/i,
-  ],
-  complex: [
-    /multi.*node/i,
-    /conditional/i,
-    /branch/i,
-    /error.*recovery/i,
-    /complex/i,
-    /optimize/i,
-    /refactor/i,
-  ],
+// ---- Provider registry ----
+
+interface ProviderTemplate {
+  id: string;
+  tier: ComplexityTier;
+  model: string;
+  baseUrl: string;
+  envKey: string;
+  priority: number;
+}
+
+const PROVIDER_REGISTRY: ProviderTemplate[] = [
+  // Tier 1: Cheap/Fast
+  { id: "groq",        tier: "simple",  model: "llama-3.3-70b-versatile",    baseUrl: "https://api.groq.com/openai/v1",         envKey: "GROQ_API_KEY",          priority: 1 },
+  { id: "deepseek",    tier: "simple",  model: "deepseek-chat",              baseUrl: "https://api.deepseek.com/v1",            envKey: "DEEPSEEK_API_KEY",       priority: 2 },
+  { id: "gemini",      tier: "simple",  model: "gemini-2.0-flash",           baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", envKey: "GEMINI_API_KEY", priority: 3 },
+
+  // Tier 2: Balanced
+  { id: "openai",      tier: "medium",  model: "gpt-4o-mini",                baseUrl: "https://api.openai.com/v1",              envKey: "OPENAI_API_KEY",         priority: 1 },
+  { id: "anthropic",   tier: "medium",  model: "claude-3.5-haiku",           baseUrl: "https://api.anthropic.com/v1",           envKey: "ANTHROPIC_API_KEY",      priority: 2 },
+  { id: "together",    tier: "medium",  model: "meta-llama/Llama-3.3-70B-Instruct-Turbo", baseUrl: "https://api.together.xyz/v1", envKey: "TOGETHER_API_KEY", priority: 3 },
+
+  // Tier 3: Powerful
+  { id: "openai",      tier: "complex", model: "gpt-4o",                     baseUrl: "https://api.openai.com/v1",              envKey: "OPENAI_API_KEY",         priority: 1 },
+  { id: "anthropic",   tier: "complex", model: "claude-sonnet-4-20250514",   baseUrl: "https://api.anthropic.com/v1",           envKey: "ANTHROPIC_API_KEY",      priority: 2 },
+  { id: "gemini",      tier: "complex", model: "gemini-2.0-pro",             baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", envKey: "GEMINI_API_KEY", priority: 3 },
+
+  // Tier 4: Expert
+  { id: "openai",      tier: "expert",  model: "o3-mini",                    baseUrl: "https://api.openai.com/v1",              envKey: "OPENAI_API_KEY",         priority: 1 },
+  { id: "anthropic",   tier: "expert",  model: "claude-opus-4-20250514",     baseUrl: "https://api.anthropic.com/v1",           envKey: "ANTHROPIC_API_KEY",      priority: 2 },
+  { id: "deepseek",    tier: "expert",  model: "deepseek-reasoner",          baseUrl: "https://api.deepseek.com/v1",            envKey: "DEEPSEEK_API_KEY",       priority: 3 },
+
+  // Extra cheap options (OpenAI-compatible)
+  { id: "perplexity",  tier: "simple",  model: "sonar-pro",                  baseUrl: "https://api.perplexity.ai",              envKey: "PERPLEXITY_API_KEY",     priority: 4 },
+  { id: "xai",         tier: "simple",  model: "grok-2-latest",              baseUrl: "https://api.x.ai/v1",                    envKey: "XAI_API_KEY",            priority: 5 },
+  { id: "mistral",     tier: "medium",  model: "mistral-large-latest",       baseUrl: "https://api.mistral.ai/v1",              envKey: "MISTRAL_API_KEY",        priority: 4 },
+];
+
+// ---- Complexity Classifier ----
+
+const COMPLEXITY_KEYWORDS: Record<ComplexityTier, RegExp[]> = {
+  simple:  [ /^(hi|hello|hey|test)\b/i, /^\.{1,3}$/, /^\w{1,15}$/ ],
+  medium:  [ /^(what|how|why|when|where|who)\b/i, /\byou are\b/i, /^(tell|explain|describe|show)\b/i ],
+  complex: [ /(code|function|implement|refactor|debug|analyze|design|architect|optimize|migrate)/i,
+             /\b(workflow|pipeline|api|schema|database|algorithm|compon)/i,
+             /```/, /\n.*\{.*\n/, /multi-step|several step|multiple/i ],
+  expert:  [ /(security|vulnerability|cryptograph|prove|theorem|optimize.*complex)/i,
+             /\b(research|analyze.*deep|comprehensive|formal)/i,
+             /\{[\s\S]{200,}\}/, /\n.{300,}/ ],
 };
 
-export class LLMRouter {
-  private redisClient: RedisClientType | null = null;
-  private configs: Map<string, LLMConfig> = new Map();
-  private costRecords: CostRecord[] = [];
-  private useCache: boolean = true;
-  private cacheTTL: number = 86400;
+function classifyComplexity(text: string, toolCount: number): ComplexityTier {
+  // Many tools available → likely complex task
+  if (toolCount > 8) return "complex";
+  if (toolCount > 15) return "expert";
 
-  constructor(configs?: Partial<Record<string, LLMConfig>>, redisUrl?: string) {
-    if (configs) {
-      Object.entries(configs).forEach(([key, config]) => {
-        this.configs.set(key, { ...DEFAULT_LLM_CONFIGS[key], ...config });
-      });
-    } else {
-      Object.entries(DEFAULT_LLM_CONFIGS).forEach(([key, config]) => {
-        this.configs.set(key, config);
-      });
-    }
-
-    if (redisUrl) {
-      this.initRedis(redisUrl);
+  // Keyword matching (priority order: expert → complex → medium → simple)
+  for (const tier of ["expert", "complex"] as ComplexityTier[]) {
+    for (const re of COMPLEXITY_KEYWORDS[tier]) {
+      if (re.test(text)) return tier;
     }
   }
 
-  private async initRedis(url: string) {
-    try {
-      this.redisClient = createClient({ url });
-      await this.redisClient.connect();
-    } catch (error) {
-      console.warn('Redis connection failed, caching disabled:', error);
-      this.useCache = false;
-    }
+  // Length-based heuristics
+  const len = text.length;
+  if (len > 2000) return "complex";
+  if (len > 500) return "medium";
+
+  // Short queries
+  for (const re of COMPLEXITY_KEYWORDS.medium) {
+    if (re.test(text)) return "medium";
+  }
+  if (len < 20) return "simple";
+
+  return "medium";
+}
+
+// ---- Cost Tracker ----
+
+class CostTracker {
+  private records: CostRecord[] = [];
+  private sessionStart: number;
+
+  constructor() {
+    this.sessionStart = Date.now();
   }
 
-  analyzeComplexity(taskType: string, prompt: string): TaskComplexity {
-    const text = `${taskType} ${prompt}`;
-    
-    let matchedComplex = 0;
-    let matchedMedium = 0;
-    let matchedSimple = 0;
-
-    COMPLEXITY_PATTERNS.complex.forEach(p => {
-      if (p.test(text)) matchedComplex++;
-    });
-    COMPLEXITY_PATTERNS.medium.forEach(p => {
-      if (p.test(text)) matchedMedium++;
-    });
-    COMPLEXITY_PATTERNS.simple.forEach(p => {
-      if (p.test(text)) matchedSimple++;
-    });
-
-    const estimatedTokens = Math.ceil(prompt.length / 4);
-
-    if (matchedComplex > 0 || estimatedTokens > 2000) {
-      return { level: 'complex', estimatedTokens, requiredCapabilities: ['reasoning', 'code'] };
-    } else if (matchedMedium > 0 || estimatedTokens > 500) {
-      return { level: 'medium', estimatedTokens, requiredCapabilities: ['generation'] };
-    } else {
-      return { level: 'simple', estimatedTokens, requiredCapabilities: ['extraction'] };
-    }
+  record(providerId: string, model: string, tokensIn: number, tokensOut: number): void {
+    const costs = MODEL_COST[model] || { in: 1.0, out: 4.0 };
+    const cost = (tokensIn / 1_000_000) * costs.in + (tokensOut / 1_000_000) * costs.out;
+    this.records.push({ providerId, model, tokensIn, tokensOut, cost });
   }
 
-  selectModel(
-    complexity: TaskComplexity,
-    maxBudget?: number,
-    maxLatency?: number
-  ): string {
-    const candidates: string[] = [];
-
-    if (complexity.level === 'simple') {
-      candidates.push('local7b', 'claude3haiku', 'gpt35');
-    } else if (complexity.level === 'medium') {
-      candidates.push('claude3haiku', 'gpt35', 'gpt4o', 'claude3opus');
-    } else {
-      candidates.push('gpt4o', 'claude3opus', 'claude3haiku', 'gpt35');
-    }
-
-    for (const key of candidates) {
-      const config = this.configs.get(key);
-      if (!config) continue;
-
-      if (maxBudget && config.costPer1kInput > maxBudget) continue;
-      if (maxLatency && config.timeoutMs > maxLatency) continue;
-
-      return key;
-    }
-
-    return 'gpt35';
+  getTotalCost(): number {
+    return this.records.reduce((s, r) => s + r.cost, 0);
   }
 
-  private computeCacheKey(taskType: string, prompt: string): string {
-    const hash = crypto.createHash('sha256').update(`${taskType}:${prompt}`).digest('hex');
-    return `llm_cache:${taskType}:${hash.slice(0, 16)}`;
+  getStats() {
+    const byProvider: Record<string, { calls: number; cost: number; tokensIn: number; tokensOut: number }> = {};
+    for (const r of this.records) {
+      if (!byProvider[r.providerId]) byProvider[r.providerId] = { calls: 0, cost: 0, tokensIn: 0, tokensOut: 0 };
+      byProvider[r.providerId].calls++;
+      byProvider[r.providerId].cost += r.cost;
+      byProvider[r.providerId].tokensIn += r.tokensIn;
+      byProvider[r.providerId].tokensOut += r.tokensOut;
+    }
+    return {
+      sessionDurationMs: Date.now() - this.sessionStart,
+      totalCost: this.getTotalCost(),
+      totalCalls: this.records.length,
+      byProvider,
+    };
   }
 
-  async getCachedResult(cacheKey: string): Promise<string | null> {
-    if (!this.useCache || !this.redisClient) return null;
-    try {
-      return await this.redisClient.get(cacheKey);
-    } catch {
-      return null;
-    }
+  reset(): void {
+    this.records = [];
+    this.sessionStart = Date.now();
   }
+}
 
-  async cacheResult(cacheKey: string, content: string): Promise<void> {
-    if (!this.useCache || !this.redisClient) return;
-    try {
-      await this.redisClient.setEx(cacheKey, this.cacheTTL, content);
-    } catch {
-      // Silent fail
-    }
+// Global cost tracker (per agent-service instance)
+export const globalCostTracker = new CostTracker();
+
+// ---- Router ----
+
+export interface RouterConfig {
+  mode: "auto" | "manual";
+  manualTier: ComplexityTier;
+  escalation: boolean;   // auto-escalate on repeated failures
+}
+
+let routerConfig: RouterConfig = {
+  mode: "auto",
+  manualTier: "medium",
+  escalation: true,
+};
+
+export function getRouterConfig(): RouterConfig {
+  return { ...routerConfig };
+}
+
+export function setRouterConfig(cfg: Partial<RouterConfig>): RouterConfig {
+  routerConfig = { ...routerConfig, ...cfg };
+  return getRouterConfig();
+}
+
+/**
+ * Discover available API keys from environment variables AND provider config file.
+ * File-based config takes priority over env vars.
+ */
+function discoverAvailableKeys(): Record<string, string> {
+  const keys: Record<string, string> = {};
+  // 1. Env vars
+  const vars = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GROQ_API_KEY", "DEEPSEEK_API_KEY",
+    "GEMINI_API_KEY", "TOGETHER_API_KEY", "PERPLEXITY_API_KEY", "XAI_API_KEY", "MISTRAL_API_KEY"];
+  for (const v of vars) {
+    const val = process.env[v]?.trim();
+    if (val) keys[v] = val;
   }
+  // 2. File-based provider config (higher priority — overrides env)
+  const ENV_KEY_MAP: Record<string, string> = {
+    openai: "OPENAI_API_KEY",
+    "openai-powerful": "OPENAI_API_KEY",
+    "openai-expert": "OPENAI_API_KEY",
+    anthropic: "ANTHROPIC_API_KEY",
+    "anthropic-powerful": "ANTHROPIC_API_KEY",
+    "anthropic-expert": "ANTHROPIC_API_KEY",
+    groq: "GROQ_API_KEY",
+    deepseek: "DEEPSEEK_API_KEY",
+    "deepseek-expert": "DEEPSEEK_API_KEY",
+    "gemini-flash": "GEMINI_API_KEY",
+    "gemini-pro": "GEMINI_API_KEY",
+    together: "TOGETHER_API_KEY",
+    perplexity: "PERPLEXITY_API_KEY",
+    xai: "XAI_API_KEY",
+    mistral: "MISTRAL_API_KEY",
+    ollama: "OLLAMA_API_KEY",
+  };
 
-  async route(request: LLMRequest): Promise<LLMResponse> {
-    const complexity = this.analyzeComplexity(request.taskType, request.prompt);
-    const primaryModelKey = this.selectModel(complexity, request.maxBudget, request.maxLatency);
-    const config = this.configs.get(primaryModelKey)!;
-
-    const cacheKey = this.computeCacheKey(request.taskType, request.prompt);
-    const cachedContent = await this.getCachedResult(cacheKey);
-
-    if (cachedContent) {
-      return {
-        content: cachedContent,
-        model: config.model,
-        tokensUsed: { input: 0, output: 0 },
-        cost: 0,
-        latencyMs: 0,
-        cached: true,
-      };
+  try {
+    // Dynamic import to avoid circular deps at module level
+    const { getEnabledProviders } = require("./provider-config");
+    const fileProviders = getEnabledProviders() as any[];
+    if (fileProviders?.length) {
+      for (const p of fileProviders) {
+        const envKey = ENV_KEY_MAP[p.id];
+        if (envKey && p.apiKey) keys[envKey] = p.apiKey;
+      }
     }
+  } catch { /* provider-config may not be built yet */ }
 
-    const startTime = Date.now();
-    let response: LLMResponse | null = null;
-    let lastError: Error | null = null;
+  return keys;
+}
 
-    const fallbackOrder = this.getFallbackOrder(primaryModelKey);
+/**
+ * Select the best provider chain for a given task.
+ */
+export function selectProviders(text: string, toolCount: number, config?: Partial<RouterConfig>): RoutingDecision {
+  const cfg = { ...routerConfig, ...config };
+  const keys = discoverAvailableKeys();
 
-    for (const modelKey of fallbackOrder) {
-      try {
-        const cfg = this.configs.get(modelKey)!;
-        response = await this.callModel(cfg, request.prompt);
+  const tier = cfg.mode === "manual" ? cfg.manualTier : classifyComplexity(text, toolCount);
+
+  // Gather matching providers for this tier
+  const candidates = PROVIDER_REGISTRY
+    .filter((p) => p.tier === tier && keys[p.envKey])
+    .sort((a, b) => a.priority - b.priority);
+
+  // If no providers in this tier, fall back to the next available tier
+  let actualTier = tier;
+  let providers: RouterProvider[] = candidates.map((p) => ({
+    id: p.id, tier: p.tier, model: p.model, baseUrl: p.baseUrl,
+    apiKey: keys[p.envKey], priority: p.priority,
+  }));
+  if (providers.length === 0) {
+    const tiers: ComplexityTier[] = ["simple", "medium", "complex", "expert"];
+    const startIdx = tiers.indexOf(tier);
+    for (let i = startIdx + 1; i < tiers.length; i++) {
+      const fallback = PROVIDER_REGISTRY.filter((p) => p.tier === tiers[i] && keys[p.envKey]);
+      if (fallback.length > 0) {
+        providers = fallback.sort((a, b) => a.priority - b.priority).map((p) => ({
+          id: p.id, tier: p.tier, model: p.model, baseUrl: p.baseUrl,
+          apiKey: keys[p.envKey], priority: p.priority,
+        }));
+        actualTier = tiers[i];
         break;
-      } catch (error) {
-        lastError = error as Error;
-        console.warn(`Model ${modelKey} failed, trying fallback:`, error);
       }
     }
-
-    if (!response) {
-      throw lastError || new Error('All models failed');
-    }
-
-    await this.cacheResult(cacheKey, response.content);
-
-    this.recordCost({
-      timestamp: Date.now(),
-      model: response.model,
-      taskType: request.taskType,
-      tokensIn: response.tokensUsed.input,
-      tokensOut: response.tokensUsed.output,
-      cost: response.cost,
-    });
-
-    return response;
   }
 
-  private getFallbackOrder(primary: string): string[] {
-    const fallbacks: Record<string, string[]> = {
-      gpt4o: ['gpt4o', 'claude3opus', 'claude3haiku', 'gpt35'],
-      gpt35: ['gpt35', 'claude3haiku'],
-      claude3opus: ['claude3opus', 'claude3haiku', 'gpt4o'],
-      claude3haiku: ['claude3haiku', 'gpt35'],
-      local7b: ['local7b', 'gpt35'],
-    };
-    return fallbacks[primary] || [primary];
-  }
-
-  private async callModel(config: LLMConfig, prompt: string): Promise<LLMResponse> {
-    const startTime = Date.now();
-
-    let content: string;
-    let tokensIn: number;
-    let tokensOut: number;
-
-    if (config.provider === 'openai') {
-      const result = await this.callOpenAI(config, prompt);
-      content = result.content;
-      tokensIn = result.tokensIn;
-      tokensOut = result.tokensOut;
-    } else if (config.provider === 'anthropic') {
-      const result = await this.callAnthropic(config, prompt);
-      content = result.content;
-      tokensIn = result.tokensIn;
-      tokensOut = result.tokensOut;
-    } else if (config.provider === 'local') {
-      const result = await this.callLocal(config, prompt);
-      content = result.content;
-      tokensIn = Math.ceil(prompt.length / 4);
-      tokensOut = Math.ceil(content.length / 4);
-    } else {
-      throw new Error(`Unknown provider: ${config.provider}`);
-    }
-
-    const latencyMs = Date.now() - startTime;
-    const cost = (tokensIn / 1000) * config.costPer1kInput + (tokensOut / 1000) * config.costPer1kOutput;
-
-    return {
-      content,
-      model: config.model,
-      tokensUsed: { input: tokensIn, output: tokensOut },
-      cost,
-      latencyMs,
-      cached: false,
-    };
-  }
-
-  private async callOpenAI(config: LLMConfig, prompt: string) {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey || process.env.OPENAI_API_KEY}`,
-      },
-      signal: AbortSignal.timeout(config.timeoutMs),
-      body: JSON.stringify({
-        model: config.model,
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: config.maxTokens,
-        temperature: config.temperature,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
-    }
-
-    const data = await response.json() as { choices: { message: { content: string } }[]; usage: { prompt_tokens: number; completion_tokens: number } };
-    return {
-      content: data.choices[0]?.message?.content || '',
-      tokensIn: data.usage?.prompt_tokens || 0,
-      tokensOut: data.usage?.completion_tokens || 0,
-    };
-  }
-
-  private async callAnthropic(config: LLMConfig, prompt: string) {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': config.apiKey || process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      signal: AbortSignal.timeout(config.timeoutMs),
-      body: JSON.stringify({
-        model: config.model,
-        max_tokens: config.maxTokens,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Anthropic API error: ${response.status}`);
-    }
-
-    const data = await response.json() as { content: { text: string }[]; usage: { input_tokens: number; output_tokens: number } };
-    return {
-      content: data.content[0]?.text || '',
-      tokensIn: data.usage?.input_tokens || 0,
-      tokensOut: data.usage?.output_tokens || 0,
-    };
-  }
-
-  private async callLocal(config: LLMConfig, prompt: string) {
-    const response = await fetch(config.endpoint!, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(config.timeoutMs),
-      body: JSON.stringify({
-        model: config.model,
-        prompt,
-        options: { temperature: config.temperature, num_predict: config.maxTokens },
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Local model error: ${response.status}`);
-    }
-
-    const data = await response.json() as { response?: string };
-    return {
-      content: data.response || '',
-      tokensIn: 0,
-      tokensOut: 0,
-    };
-  }
-
-  private recordCost(record: CostRecord): void {
-    this.costRecords.push(record);
-    if (this.costRecords.length > 10000) {
-      this.costRecords = this.costRecords.slice(-5000);
-    }
-  }
-
-  getCostBreakdown(period: 'daily' | 'weekly' = 'daily'): { date: string; totalCost: number; byModel: Record<string, number> }[] {
-    const now = Date.now();
-    const periodMs = period === 'daily' ? 86400000 : 604800000;
-    const startTime = now - periodMs * 7;
-
-    const filtered = this.costRecords.filter(r => r.timestamp >= startTime);
-
-    const byDate: Record<string, { total: number; byModel: Record<string, number> }> = {};
-
-    for (const record of filtered) {
-      const date = new Date(record.timestamp).toISOString().split('T')[0];
-      if (!byDate[date]) {
-        byDate[date] = { total: 0, byModel: {} };
+  // If still nothing, try downward (simpler) tiers
+  if (providers.length === 0) {
+    const tiers: ComplexityTier[] = ["simple", "medium", "complex", "expert"];
+    const startIdx = tiers.indexOf(tier);
+    for (let i = startIdx - 1; i >= 0; i--) {
+      const fallback = PROVIDER_REGISTRY.filter((p) => p.tier === tiers[i] && keys[p.envKey]);
+      if (fallback.length > 0) {
+        providers = fallback.sort((a, b) => a.priority - b.priority).map((p) => ({
+          id: p.id, tier: p.tier, model: p.model, baseUrl: p.baseUrl,
+          apiKey: keys[p.envKey], priority: p.priority,
+        }));
+        actualTier = tiers[i];
+        break;
       }
-      byDate[date].total += record.cost;
-      byDate[date].byModel[record.model] = (byDate[date].byModel[record.model] || 0) + record.cost;
-    }
-
-    return Object.entries(byDate)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, data]) => ({ date, totalCost: data.total, byModel: data.byModel }));
-  }
-
-  async getCacheStats(): Promise<{ hitRate: number; size: number }> {
-    if (!this.redisClient) return { hitRate: 0, size: 0 };
-    try {
-      const keys = await this.redisClient.keys('llm_cache:*');
-      return { hitRate: 0, size: keys.length };
-    } catch {
-      return { hitRate: 0, size: 0 };
     }
   }
 
-  async close(): Promise<void> {
-    if (this.redisClient) {
-      await this.redisClient.quit();
-    }
-  }
+  const reason = providers.length > 0
+    ? `Routed to ${actualTier} tier: ${providers.map((p) => `${p.id}/${p.model}`).join(" → ")}`
+    : "No configured providers found for any tier";
+
+  return { tier: actualTier, providers, reason };
 }
 
-export function createLLMRouter(configs?: Partial<Record<string, LLMConfig>>, redisUrl?: string): LLMRouter {
-  return new LLMRouter(configs, redisUrl);
+/**
+ * Get all API keys that are set (without revealing their values).
+ */
+export function getConfiguredProviders(): string[] {
+  const keys = discoverAvailableKeys();
+  const result: string[] = [];
+  for (const p of PROVIDER_REGISTRY) {
+    if (keys[p.envKey] && !result.includes(p.id)) {
+      result.push(p.id);
+    }
+  }
+  return result;
 }
+
+// Re-export the re-built provider list for agent-loop.ts to use
+export { PROVIDER_REGISTRY };

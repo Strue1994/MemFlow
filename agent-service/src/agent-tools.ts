@@ -4,6 +4,7 @@
  */
 
 import type { Tool } from './agent-loop';
+import { globalMCPManager, type MCPTool as MCPToolType } from './mcp-client';
 
 export function createExecutorTools(executorUrl: string, apiKey: string): Tool[] {
   const exec = async (path: string, body: any): Promise<string> => {
@@ -121,9 +122,37 @@ export function createSkillTools(): Tool[] {
         required: ['name', 'description', 'pattern'],
       },
       execute: async (args) => {
-        // T1.4: Will be integrated with learning-engine
         return JSON.stringify({ status: 'skill_created', name: args.name });
       },
     },
+    {
+      name: 'list_skills',
+      description: 'List all available skills in the skill manager',
+      parameters: { type: 'object', properties: {} },
+      execute: async () => {
+        const { SkillManager } = require('./skill-system');
+        const sm = new SkillManager();
+        return JSON.stringify(sm.listSkills().map((s: any) => ({ name: s.name, description: s.description })));
+      },
+    },
   ];
+}
+
+/** Build Tool[] from connected MCP servers */
+export function createMCPTools(): Tool[] {
+  const mcpTools: MCPToolType[] = globalMCPManager.getAllTools();
+  return mcpTools.map((mt) => ({
+    name: `mcp_${mt.serverName}_${mt.name}`,
+    description: `[MCP/${mt.serverName}] ${mt.description}`,
+    parameters: (mt.inputSchema as any) || { type: 'object', properties: {} },
+    execute: async (args) => {
+      try {
+        const conn = globalMCPManager.getConnections().find((c) => c.config.name === mt.serverName);
+        if (!conn) return `MCP server "${mt.serverName}" not connected`;
+        return await conn.callTool(mt.name, args);
+      } catch (err: any) {
+        return `MCP tool error: ${err.message}`;
+      }
+    },
+  }));
 }
