@@ -286,6 +286,9 @@ function createTaskEntryDeps(overrides: AppDependencies = {}): TaskEntryDeps & R
 }
 
 
+// ---- Resumable session state ----
+let restoredContext: any[] | null = null;
+
 // ---- Start MCP Server (T1.3) ----
 const mcpTransport = process.env.MCP_TRANSPORT;
 if (mcpTransport === "sse" || mcpTransport === "stdio") {
@@ -607,11 +610,13 @@ Respond with JSON only: { "workflowId": "string", "params": { ... } }`,
       // Run before middleware pipeline
       const ctx: MiddlewareContext = {
         text,
-        messages: [],
+        messages: restoredContext ? [...restoredContext] : [],
         tools: exTools,
         stream,
         meta: { sessionId },
       };
+      // Clear restored context after first use (it's now in the conversation flow)
+      restoredContext = null;
       const { modifiedCtx, earlyResponse } = await runBeforePipeline(ctx);
       if (earlyResponse) {
         globalTracer.completeSpan(traceSpan, earlyResponse);
@@ -1191,13 +1196,17 @@ if (require.main === module) {
       }
     } catch { /* best-effort */ }
 
-    // Check for resumable sessions (Hermes auto-resume)
+    // Auto-resume from checkpoint
     try {
       if (checkpoints.hasResumableSession()) {
         const lastSession = checkpoints.getLastSessionId();
-        const stats = checkpoints.getStorageStats();
-        console.log(`⚠  Resumable session found: ${lastSession} (${stats.totalCheckpoints} checkpoints, ${(stats.totalBytes / 1024).toFixed(0)}KB)`);
-        console.log("   → GET /checkpoints/latest to restore");
+        const ck = checkpoints.getLatestCheckpoint();
+        if (ck && ck.messages && ck.messages.length > 0) {
+          restoredContext = ck.messages;
+          const stats = checkpoints.getStorageStats();
+          logger.info({ sessionId: lastSession, messages: ck.messages.length }, "Auto-resumed session from checkpoint");
+          console.log(`✓ Auto-resumed session ${lastSession} (${ck.messages.length} messages restored)`);
+        }
       }
     } catch { /* best-effort */ }
 

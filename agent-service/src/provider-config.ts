@@ -91,6 +91,13 @@ const CHANNEL_TEMPLATES: Omit<ChannelEntry, "enabled" | "config">[] = [
   { id: "whatsapp", label: "WhatsApp" },
   { id: "wechat", label: "WeChat" },
   { id: "feishu", label: "Feishu / Lark" },
+  { id: "signal", label: "Signal" },
+  { id: "teams", label: "Microsoft Teams" },
+  { id: "google-chat", label: "Google Chat" },
+  { id: "line", label: "LINE" },
+  { id: "email", label: "Email (SMTP)" },
+  { id: "matrix", label: "Matrix" },
+  { id: "imessage", label: "iMessage (macOS)" },
 ];
 
 // ---- Config file path ----
