@@ -10,36 +10,39 @@ MemFlow is an open-source AI agent platform that combines a high-performance Rus
 
 ## Quick Start
 
+### 🚀 One-command install (like `openclaw` / `hermes`)
+
 ```bash
-# 1. Install dependencies & build
+npx @memflow/cli
+```
+
+This will:
+1. **Ask where to install** (default: `./memflow`)
+2. **Download** the latest MemFlow from GitHub (git clone or tarball)
+3. **Build** the agent service automatically
+4. **Run the interactive setup wizard** — pick LLM providers, configure channels, test everything
+5. **Start the service** on `http://localhost:3000`
+
+> **Like `openclaw onboard` or `hermes setup`** — but for your own AI agent platform.
+
+### Manual install (from cloned repo)
+
+```bash
+# 1. Clone
+git clone https://github.com/Strue1994/MemFlow.git
+cd MemFlow
+
+# 2. Build agent service
 cd agent-service && npm install && npm run build
 
-# 2. Run the setup wizard (interactive — guides you through everything)
+# 3. Run setup wizard
 npm run setup
 
-# 3. Service is running at http://localhost:3000
-#    Try it out:
+# 4. Service is running at http://localhost:3000
 curl http://localhost:3000/health
-curl http://localhost:3000/skills
 ```
 
-The setup wizard will:
-- Check prerequisites (Node.js, Docker)
-- Ask for your LLM provider API keys (OpenAI, Anthropic, Groq, etc.)
-- Auto-detect any existing `.env` file
-- Optionally configure messaging channels (Telegram, Discord, Slack)
-- Start the service
-- Verify everything works
-
-> **Like `openclaw onboard` or `hermes setup`** — but for MemFlow.
-
-### Manual start (if you prefer)
-
-```bash
-cd agent-service
-npm start
-# Service runs on http://localhost:3000
-```
+The setup wizard handles: LLM provider API keys (OpenAI, Anthropic, Groq, DeepSeek, Gemini, etc.), auto-detect existing `.env` files, messaging channel configuration (Telegram, Discord, Slack, WhatsApp, Signal), service start, and end-to-end verification.
 
 ## Architecture
 

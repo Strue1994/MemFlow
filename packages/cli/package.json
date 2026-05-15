@@ -1,0 +1,30 @@
+{
+  "name": "@memflow/cli",
+  "version": "1.0.0",
+  "description": "MemFlow CLI installer — like openclaw onboard, hermes setup",
+  "bin": {
+    "memflow": "bin/memflow.js"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["memflow", "ai-agent", "workflow", "cli", "installer"],
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "tsx": "^4.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Strue1994/MemFlow.git"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
