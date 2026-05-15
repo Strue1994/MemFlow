@@ -1,243 +1,230 @@
 # MemFlow
 
-MemFlow Stage 1 now runs through a workflow-first task console. The primary user path starts in `web-ui/`, routes through `agent-service/`, and executes through the Rust `executor/`. The older Python loop in `main.py` and `core/agent_loop.py` is still present for experimentation, but it is not the main product path.
+**Workflow-first AI Agent Platform** — Rust workflow engine + TypeScript agent runtime + multi-channel messaging + self-learning skills.
 
-## Stage 1 Product Path
+MemFlow is an open-source AI agent platform that combines a high-performance Rust workflow execution engine with a full-featured agent runtime. It routes tasks through smart LLM providers, executes workflows, learns from experience, and delivers results across 10+ messaging channels.
 
-The Stage 1 flow is:
-
-1. A user submits a natural-language task in the task console.
-2. MemFlow determines whether the request is:
-   - a repeatable workflow task, or
-   - a one-off task.
-3. The runtime then routes the task to one of three outcomes:
-   - an existing workflow,
-   - a generated workflow,
-   - or an agent-driven execution path.
-4. MemFlow executes the route and explains the result back in the console.
-
-This is the intended product path for current development and verification work.
-
-## Runtime Roles
-
-- `executor/` = workflow execution kernel
-- `agent-service/` = primary task-routing entrypoint
-- `web-ui/` = workflow-first task console
-- `main.py` / `core/agent_loop.py` = experimental Python loop, not the primary Stage 1 runtime
-
-## Architecture Overview
-
-At a high level, the repository is organized into four major layers:
-
-1. **Workflow-first product runtime**
-   - `web-ui/` provides the task console and Stage 1 user flow.
-   - `agent-service/` accepts task requests, decides the execution path, and bridges the UI to the executor.
-   - `executor/` runs workflows, persistence, plugins, concurrency, and learning-related modules.
-
-2. **Python orchestration layer (experimental)**
-   - `main.py` is the Python entry point for the local interactive agent.
-   - `core/agent_loop.py` contains the main think-act-observe loop, plus checkpoint/retry scaffolding.
-   - `core/tool_manager.py` owns tool registration, schema validation, and execution dispatch.
-   - `core/task_planner.py` handles simple task decomposition and replanning.
-   - `core/sandbox.py` abstracts code execution backends, with E2B as the primary implementation.
-   - `utils/context_manager.py` manages conversation history and token-aware compression.
-   - `config.py` centralizes runtime settings and environment-backed configuration.
-
-3. **Operational tooling**
-   - `ui/`, Docker files, local start/stop scripts, dashboards, and deployment assets support development and operations.
-
-## Python Module Responsibilities
-
-### `main.py`
-Creates the default `ToolManager`, `ContextManager`, and `Sandbox`, registers a sandbox execution tool, and starts either:
-- an interactive CLI loop, or
-- a single-message execution mode.
-
-### `core/agent_loop.py`
-Implements the core agent loop with:
-- response/tool/clarification action selection,
-- tool execution and observation,
-- lightweight checkpoint snapshots,
-- retry scaffolding,
-- task planner integration.
-
-Important current limitation: the actual LLM reasoning path is still mocked by `_mock_llm_think()`.
-
-### `core/tool_manager.py`
-Provides a registry for tools and their schemas. It:
-- registers callable tools,
-- validates required arguments,
-- supports async and sync execution,
-- exposes schemas for future function-calling integration.
-
-### `core/task_planner.py`
-Provides:
-- `SubGoal`
-- `Plan`
-- `TaskPlanner`
-
-The current decomposition strategy is rule-based unless an external LLM client is injected.
-
-### `core/sandbox.py`
-Wraps isolated execution. Today it primarily supports:
-- E2B-backed Python execution,
-- limited JavaScript execution through E2B.
-
-Local execution is explicitly not implemented for safety.
-
-### `utils/context_manager.py`
-Tracks conversation messages and supports token-aware compression. It currently uses:
-- `tiktoken` for counting,
-- heuristic truncation/compression instead of full summarization.
-
-### `config.py`
-Defines a dataclass-backed configuration object with environment variables for:
-- API keys,
-- model defaults,
-- context size,
-- sandbox backend,
-- MCP server settings.
-
-## Environment
-
-Copy `.env.example` to `.env` and set at minimum:
-
-- `EXECUTOR_API_KEY`: shared between `executor` and `agent-service`
-- `OPENAI_API_KEY`: required for the `/chat` endpoint and any real LLM-backed functionality
-- `E2B_API_KEY`: required if you want Python sandbox execution via E2B
-
-## Installation
-
-### Python dependencies
+## Quick Start
 
 ```bash
-pip install -r requirements.txt
+# 1. Start the services
+docker compose up -d
+
+# 2. Check health
+curl http://localhost:3000/health
+
+# 3. Configure an LLM provider
+curl -X POST http://localhost:3000/providers \
+  -H "Content-Type: application/json" \
+  -d '{"id":"openai","apiKey":"sk-...","enabled":true}'
+
+# 4. Run your first agent task
+curl -X POST http://localhost:3000/agent/execute \
+  -H "Content-Type: application/json" \
+  -d '{"text":"What is 2+2?"}'
 ```
 
-### Main Python requirements
-- `openai`
-- `tiktoken`
-- `pydantic`
-- `httpx`
-- `apscheduler`
-- `aiosqlite`
-- `gradio`
-- `python-dotenv`
-- `aiofiles`
-- `pytest`
+## Architecture
 
-### Local development prerequisites
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│  Channels   │────▶│ Agent Service│────▶│  Executor   │
+│ (Telegram,  │     │ (Node.js)    │     │ (Rust)      │
+│  Discord,   │     │              │     │             │
+│  Slack...)  │     │ • LLM Router │     │ • Workflow  │
+└─────────────┘     │ • Curator    │     │ • Sandbox   │
+                    │ • Skills     │     │ • WASM      │
+┌─────────────┐     │ • MCP        │     │ • Subagents │
+│   Web UI    │────▶│ • Middleware │     └──────┬──────┘
+│  (React)    │     │ • Checkpoints│            │
+└─────────────┘     └──────┬───────┘            │
+                           │                    │
+                    ┌──────▼────────────────────▼──┐
+                    │       Memory Hub (Rust)       │
+                    │  Persistent storage + search  │
+                    └───────────────────────────────┘
+```
 
-- [Rust](https://rustup.rs/) with `stable-x86_64-pc-windows-msvc`
-- [Node.js](https://nodejs.org/) 18+
-- PowerShell 5.1+
+## Features
 
-## Running the Project
+### Core Runtime
+| Feature | Description |
+|---------|-------------|
+| **Smart LLM Routing** | Auto-selects provider/model by task complexity (4 tiers, 14 providers: OpenAI, Anthropic, Groq, DeepSeek, Gemini, etc.) |
+| **Provider Fallback** | Primary → secondary → tertiary fallback with cost tracking |
+| **Think-Act-Observe Loop** | Multi-iteration agent loop with tool calling, error recovery, and context compression |
+| **Streaming** | Real-time response streaming via SSE (OpenAI + Anthropic) |
+| **MCP Support** | Full MCP server + client (stdio/SSE), tool discovery, auto-connect |
 
-### Full stack via Docker
+### Self-Learning
+| Feature | Description |
+|---------|-------------|
+| **Curator** | Monitors executions, auto-generates skills from patterns, merges similar skills, prunes unused ones |
+| **Skill System** | SKILL.md compatible (Superpowers/agentskills.io format), 26 built-in skills |
+| **Marketplace** | Browse and install skills from GitHub repos |
+| **Memory** | Persistent memory with semantic search via memory hub |
 
+### Reliability
+| Feature | Description |
+|---------|-------------|
+| **Checkpoints** | Session state persistence with auto-resume after restart, 1GB pruning |
+| **Middleware Pipeline** | 6 pluggable layers: sandbox, summarization, todo, memory, title, clarification |
+| **Health Probes** | /health, /ready (with dependency checks), /live endpoints |
+| **Graceful Shutdown** | SIGTERM/SIGINT → disconnect MCP → flush checkpoints → clean exit |
+| **Retry Backoff** | Automatic retry with exponential backoff for service calls |
+| **Backup/Restore** | One-click state snapshots |
+
+### Security
+| Feature | Description |
+|---------|-------------|
+| **Authentication** | JWT + API key auth, enabled by default, public endpoint whitelist |
+| **Rate Limiting** | Token bucket per IP (default 100 req/min) |
+| **CORS** | Configurable origin allowlist |
+| **Encryption at Rest** | AES-256-GCM for provider API keys and secrets |
+| **Input Validation** | Request body validation on all critical endpoints |
+| **Security Scanner** | 5-category scan: secrets, permissions, hooks, MCP, config |
+
+### Channels
+| Platform | Status |
+|----------|:------:|
+| Telegram | ✅ |
+| Discord | ✅ |
+| Slack | ✅ |
+| WhatsApp | ✅ |
+| Signal | ✅ |
+| WeChat | ✅ |
+| Feishu / Lark | ✅ |
+| Microsoft Teams | ✅ |
+| Google Chat | ✅ |
+| LINE | ✅ |
+
+### Observability
+| Feature | Description |
+|---------|-------------|
+| **Structured Logging** | JSON via pino, configurable log level |
+| **Prometheus Metrics** | Request counts, agent duration histogram, active sessions, MCP connections |
+| **Tracing** | Per-session trace spans (/traces endpoint) |
+| **Cost Tracking** | Per-provider token usage and cost |
+
+### SDK
+```
+npm install @memflow/sdk
+```
+
+```typescript
+import { MemFlow } from "@memflow/sdk";
+const mf = new MemFlow({ baseUrl: "http://localhost:3000" });
+
+// Execute agent
+const result = await mf.agent.execute("analyze this log file");
+
+// Manage providers
+await mf.providers.add("groq", { apiKey: "gsk_..." });
+
+// Run curator
+await mf.curator.run();
+
+// Save checkpoint
+await mf.checkpoints.save("session-1", [...messages]);
+```
+
+## Deployment
+
+### Docker Compose (recommended)
 ```bash
-docker-compose up --build
+docker compose up -d
 ```
 
-### Local launcher (recommended on Windows)
-
-```powershell
-.\scripts\dev-local.ps1
-```
-
-This is the current Stage 1 local startup path on Windows. The launcher builds and starts the agent service, starts or reuses the executor, serves the Stage 1 frontend, and waits for readiness of:
-- Executor (`8082`)
-- Agent service (`3300`)
-- Frontend (`5273`)
-
-### Stop local services
-
-```powershell
-.\scripts\stop-local.ps1
-```
-
-### Python CLI entry
-
-```bash
-python main.py
-```
-
-### Single-message mode
-
-```bash
-python main.py --single "run python_exec"
-```
-
-## Start Components Individually
-
+### Manual (development)
 ```powershell
 # Executor
-$env:RUSTUP_TOOLCHAIN="stable-x86_64-pc-windows-msvc"
-cargo run --package executor -- serve --addr 127.0.0.1:8082
+cargo run -p executor -- serve --addr 127.0.0.1:8082
 
-# Agent service
-cd agent-service
-npm run build
-$env:PORT=3300
-$env:EXECUTOR_URL="http://127.0.0.1:8082"
-node dist/index.js
+# Memory Hub
+cargo run -p memory-hub
 
-# Frontend
-cd web-ui
-$env:MEMFLOW_WEB_PORT=5273
-npm run build
-node ..\scripts\serve-web-ui.js
+# Agent Service
+cd agent-service && npm install && npm run build
+$env:PORT=3000; node dist/index.js
 ```
 
-## Services
+### Configuration
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `PORT` | 3000 | Agent service port |
+| `EXECUTOR_URL` | http://127.0.0.1:8082 | Executor URL |
+| `MEMORY_HUB_URL` | http://127.0.0.1:8081 | Memory hub URL |
+| `EXECUTOR_API_KEY` | memflow-local-dev-key | Shared API key |
+| `AUTH_ENABLED` | true | Enable authentication |
+| `API_KEYS` | — | Comma-separated API keys |
+| `RATE_LIMIT_RPM` | 100 | Rate limit per IP |
+| `CORS_ORIGIN` | http://localhost:3000 | Allowed CORS origin |
+| `ENCRYPTION_KEY` | — | AES-256-GCM key for secrets |
+| `LOG_LEVEL` | info | Log level (trace/debug/info/warn/error) |
+| `MEMFLOW_RUNTIME_ROOT` | ./.memflow-runtime | Runtime data directory |
 
-- Executor: `http://localhost:8080`
-- Agent service: `http://localhost:3000`
-- Frontend: `http://localhost:80`
+## API Overview
 
-The agent service forwards workflow compile and execute requests to the executor using `X-API-Key` authentication.
+| Category | Endpoints |
+|----------|-----------|
+| Agent | `POST /agent/execute`, `POST /v1/chat/completions` |
+| Router | `GET /router/config`, `POST /router/config`, `GET /router/stats` |
+| MCP | `GET/POST/DELETE /mcp/servers`, `POST .../connect`, `POST .../disconnect` |
+| Curator | `POST /curator/run`, `GET /curator/status`, `GET /curator/history` |
+| Checkpoints | `GET /checkpoints`, `POST /checkpoints/save`, `GET .../latest`, `DELETE .../:id` |
+| Skills | `GET /skills`, `POST /skills/import`, `GET /marketplace/list` |
+| Middleware | `GET /middleware/config`, `POST .../:name/toggle` |
+| Providers | `GET/POST /providers`, `DELETE /providers/:id` |
+| Channels | `GET/POST /channels`, `DELETE /channels/:id` |
+| Tracing | `GET /traces`, `GET /traces/:sessionId` |
+| Security | `POST /security/scan` |
+| Sandbox | `GET/POST /sandbox/config`, `POST /sandbox/execute` |
+| Subagents | `GET /subagents`, `POST .../spawn`, `GET .../:id/status`, `POST .../:id/cancel` |
+| Goal | `POST /goal/set`, `GET /goal`, `POST /goal/complete` |
+| Health | `GET /health`, `GET /ready`, `GET /live`, `GET /metrics` |
+| Backup | `POST /backup`, `POST /backup/restore` |
+| Setup | `GET /setup/status` |
 
-## Testing and Checks
-
-### Python
+## Testing
 
 ```bash
-pytest
-```
+# Unit tests (TypeScript)
+cd agent-service && npx vitest run
 
-### Rust workspace
-
-```bash
+# Rust tests
 cargo test --workspace
+
+# E2E (services must be running)
+pwsh test/e2e.ps1
 ```
 
-### Agent service
+## Development
 
+### Prerequisites
+- Rust (stable), Node.js 18+, Docker (optional)
+
+### Install dependencies
 ```bash
-cd agent-service && npm test
+cd agent-service && npm install
+cd sdk/typescript && npm install
 ```
 
-## Known Limitations
+### Build
+```bash
+cd agent-service && npm run build
+cd sdk/typescript && npx tsc
+cargo build --workspace
+```
 
-- The Python `AgentLoop` still uses a mock reasoning implementation instead of a real model-backed planning loop.
-- `TaskPlanner` currently falls back to rule-based decomposition for most cases.
-- The local sandbox backend is intentionally not implemented; E2B is required for safe code execution.
-- `ContextManager` uses heuristic compression rather than model-generated summarization.
-- Some Python requirements reflect intended future features more than currently exercised production paths.
+## License
 
-## Troubleshooting
+MIT
 
-| Symptom | Likely cause | Fix |
-| --- | --- | --- |
-| Executor does not start in time | First Rust build still running or port `8082` is busy | Check `.memflow-runtime\logs\executor.log` and make sure `8082` is free |
-| Agent service does not start in time | Node dependencies are missing or port `3300` is busy | Run `npm install` in `agent-service` and re-check port usage |
-| Frontend is blank or does not load | Frontend dev server failed to start or backend proxy issue | Check `.memflow-runtime\logs\frontend.log` and confirm `http://127.0.0.1:3300` is reachable |
-| `cargo` is not found | Rust is not installed or not on `PATH` | Install Rust and restart the terminal |
-| Python code execution fails immediately | `E2B_API_KEY` missing or `e2b-code-interpreter` not installed | Configure the key and install the dependency |
+## Acknowledgments
 
-## Repo Hygiene
-
-- Build artifacts are ignored at the repo root via `.gitignore`
-- Large local archives such as `tasks.zip` should stay out of version control
-- Local runtime files such as `workflow_files/` and `*.db` are disposable state unless explicitly needed for debugging
+Inspired by and compatible with:
+- [Superpowers](https://github.com/obra/superpowers) — SKILL.md skill format
+- [OpenClaw](https://github.com/openclaw/openclaw) — Multi-channel agent design
+- [Hermes Agent](https://github.com/NousResearch/hermes-agent) — Self-learning curator pattern
+- [DeerFlow](https://github.com/bytedance/deer-flow) — Middleware chain and context management
+- [Everything Claude Code](https://github.com/affaan-m/everything-claude-code) — Agent ecosystem

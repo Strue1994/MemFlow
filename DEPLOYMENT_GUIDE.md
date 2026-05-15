@@ -20,6 +20,7 @@ cd MemFlow
 
 # 创建环境配置文件
 cp .env.example .env
+# 编辑 .env 填写至少一个 LLM API key
 
 # 启动所有服务
 docker compose up -d
@@ -28,151 +29,208 @@ docker compose up -d
 docker compose ps
 ```
 
-### 2. 访问服务
-
-| 服务 | 地址 | 说明 |
-|------|------|------|
-| Executor | http://localhost:8080 | API 服务 |
-| 前端 | http://localhost:80 | Web UI |
-| Redis | localhost:6379 | 缓存 |
-| PostgreSQL | localhost:5432 | 数据库 |
-
-## 详细配置
-
-### 环境变量
-
-在 `.env` 文件中配置：
+### 2. 配置 LLM Provider
 
 ```bash
-# ─── 必需配置 ─────────────────────────────────────
-# 至少选择一个 LLM Provider
-OPENAI_API_KEY=sk-xxx      # OpenAI
-# ANTHROPIC_API_KEY=xxx    # Claude (二选一)
+# 检查服务健康
+curl http://localhost:3000/health
 
-# ─── 可选配置 ─────────────────────────────────
-PORT=8080                 # API 端口
-EXECUTOR_API_KEY=your-key  # 管理密钥
+# 添加 OpenAI provider
+curl -X POST http://localhost:3000/providers \
+  -H "Content-Type: application/json" \
+  -d '{"id":"openai","apiKey":"sk-...","enabled":true}'
 
-# ─── 数据库 (使用 SQLite 默认) ─────────────────
-DATABASE_URL=sqlite:///data/memflow.db
+# 或者添加 Anthropic
+curl -X POST http://localhost:3000/providers \
+  -H "Content-Type: application/json" \
+  -d '{"id":"anthropic","apiKey":"sk-ant-...","enabled":true}'
+
+# 验证设置
+curl http://localhost:3000/providers
 ```
 
-### 启动模式
+### 3. 运行第一个任务
 
 ```bash
-# 完整模式 (executor + agent + frontend + redis + postgres)
-docker compose up -d
-
-# 无外部依赖 (仅 executor + sqlite)
-docker compose up -d --profile minimal
-
-# 开发模式 (含前端热重载)
-docker compose --profile dev up
+curl -X POST http://localhost:3000/agent/execute \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Hello, what can you do?"}'
 ```
 
-## 云平台部署
+## 服务架构
 
-### Zeabur (推荐)
+| 服务 | 端口 | 说明 |
+|------|:----:|------|
+| **agent-service** | 3000 | 主 API 网关，LLM 路由，技能系统 |
+| **executor** | 8082 | Rust 工作流执行引擎 |
+| **memory-hub** | 8081 | 持久化存储 + 语义搜索 |
+| **web-ui** | 5273 | React 可视化编辑器 |
+| **learning-engine** | 8083 | 分析与优化引擎 |
+| **gateway** | 8084 | 消息通道网关 |
 
-1. 推送镜像到 GitHub Container Registry
-2. 在 Zeabur 控制台创建新服务
-3. 选择 Docker 容器
-4. 配置环境变量:
-   - `OPENAI_API_KEY`
-   - `EXECUTOR_API_KEY`
+## 环境变量
 
-### Railway
+### 必需
+| 变量 | 说明 |
+|------|------|
+| `OPENAI_API_KEY` | OpenAI API key |
+| 或 `ANTHROPIC_API_KEY` | Anthropic API key |
+| 或 `GROQ_API_KEY` | Groq API key |
+| 或 `DEEPSEEK_API_KEY` | DeepSeek API key |
 
-1. 连接 GitHub 仓库
-2. 设置环境变量
-3. 点击 Deploy
+### 安全
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `AUTH_ENABLED` | `true` | 启用 API 认证 |
+| `API_KEYS` | — | 逗号分隔的 API keys |
+| `RATE_LIMIT_RPM` | `100` | 每 IP 每分钟请求数 |
+| `CORS_ORIGIN` | `http://localhost:3000` | 允许的跨域来源 |
+| `ENCRYPTION_KEY` | — | AES-256-GCM 加密密钥 |
 
-### Render
+### 运行时
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `PORT` | `3000` | agent-service 端口 |
+| `EXECUTOR_URL` | `http://127.0.0.1:8082` | Executor 地址 |
+| `MEMORY_HUB_URL` | `http://127.0.0.1:8081` | Memory hub 地址 |
+| `EXECUTOR_API_KEY` | `memflow-local-dev-key` | 内部通信密钥 |
+| `LOG_LEVEL` | `info` | 日志级别 |
+| `RUST_LOG` | `info` | Rust 日志级别 |
 
-1. 新建 Web Service
-2. 选择 Docker
-3. 配置 `DATABASE_URL` (PostgreSQL)
+## Docker 部署
 
-### 自签Docker
+### 构建镜像
 
 ```bash
-# 构建镜像
-docker build -f Dockerfile.executor -t memflow-executor .
+# 构建所有服务
+docker compose build
 
-# 运行
-docker run -d \
-  -p 8080:8080 \
-  -v $(pwd)/data:/data \
-  -e OPENAI_API_KEY=sk-xxx \
-  -e EXECUTOR_API_KEY=your-key \
-  memflow-executor
+# 或单独构建
+docker build -f Dockerfile.executor -t memflow/executor .
+docker build -f Dockerfile.agent -t memflow/agent-service .
 ```
+
+### 生产部署
+
+```bash
+# 使用生产配置
+docker compose -f docker-compose.yml up -d
+
+# 查看日志
+docker compose logs -f agent-service
+
+# 更新服务
+docker compose pull && docker compose up -d
+```
+
+### 数据持久化
+
+Docker Compose 使用两个 volume：
+- `memflow_data` — executor + learning-engine 数据
+- `memflow_memory` — memory-hub 数据
+
+## Kubernetes 部署
+
+项目提供 Helm chart：
+
+```bash
+helm upgrade --install memflow ./deploy/helm/memflow \
+  --set agent.service.port=3000 \
+  --set secrets.apiKey=your-key
+```
+
+配置项见 `deploy/helm/memflow/values.yaml`
 
 ## 验证部署
 
 ```bash
 # 健康检查
-curl http://localhost:8080/health
+curl http://localhost:3000/health
+# → {"status":"ok","uptime_s":123}
 
-# 响应示例:
-# {"status":"ok","version":"0.1.0"}
+# 依赖检查
+curl http://localhost:3000/ready
+# → {"ready":true,"executor":true,"memory_hub":true}
 
-# Prometheus 指标
-curl http://localhost:8080/metrics
+# 存活检查
+curl http://localhost:3000/live
+# → {"live":true}
+
+# 指标
+curl http://localhost:3000/metrics
+# → Prometheus 格式指标
+
+# 安全扫描
+curl -X POST http://localhost:3000/security/scan
+# → {"totalFindings":...,"findings":[...]}
+
+# 备份
+curl -X POST http://localhost:3000/backup
+# → {"path":".memflow-runtime/backups/2026-05-15-..."}
 ```
 
-## 常用命令
+## Chat 通道配置
+
+### Telegram
+```bash
+curl -X POST http://localhost:3000/channels \
+  -H "Content-Type: application/json" \
+  -d '{"id":"telegram","enabled":true,"config":{"botToken":"123:ABC"}}'
+```
+
+### Discord
+```bash
+curl -X POST http://localhost:3000/channels \
+  -d '{"id":"discord","enabled":true,"config":{"botToken":"MT23_..."}}'
+```
+
+### Slack
+```bash
+curl -X POST http://localhost:3000/channels \
+  -d '{"id":"slack","enabled":true,"config":{"token":"xoxb-..."}}'
+```
+
+## 运维命令
 
 ```bash
-# 查看日志
-docker compose logs -f executor
+# 查看所有 API 端点
+curl http://localhost:3000/health
 
-# 重启服务
-docker compose restart executor
+# 查看路由配置
+curl http://localhost:3000/router/config
 
-# 更新服务
-docker compose pull
-docker compose up -d
+# 触发 curator 技能整理
+curl -X POST http://localhost:3000/curator/run
 
-# 停止
-docker compose down
+# 查看 curator 状态
+curl http://localhost:3000/curator/status
 
-# 数据备份
-cp data/memflow.db data/memflow.db.backup
+# 保存 checkpoint
+curl -X POST http://localhost:3000/checkpoints/save \
+  -d '{"sessionId":"my-session","messages":[]}'
+
+# 查看 metrics
+curl http://localhost:3000/metrics
+
+# 查看 traces
+curl http://localhost:3000/traces
 ```
 
 ## 故障排查
 
-### 服务无法启动
-
-```bash
-# 查看日志
-docker compose logs executor
-
-# 检查端口占用
-netstat -an | grep 8080
-```
-
-### 数据库问题
-
-```bash
-# 重置数据库
-rm data/memflow.db
-docker compose restart executor
-```
-
-### API Key 错误
-
-确保 `.env` 文件中的 `OPENAI_API_KEY` 正确，且有足够额度。
+| 症状 | 可能原因 | 修复 |
+|------|----------|------|
+| agent-service 启动失败 | 端口 3000 占用或依赖缺失 | `netstat -an \| findstr :3000` 检查端口 |
+| executor 连接失败 | executor 未启动或端口不对 | 检查 `EXECUTOR_URL` 配置 |
+| LLM 调用返回空 | API key 未配置或额度不足 | `GET /providers` 检查配置 |
+| Auth 返回 401 | 未配置 API key 且 AUTH_ENABLED=true | 设置 `API_KEYS` 或 `AUTH_ENABLED=false` |
+| Rate limit 429 | 请求太频繁 | 等待 60 秒或调高 `RATE_LIMIT_RPM` |
 
 ## 安全建议
 
-1. 修改默认 `EXECUTOR_API_KEY`
-2. 使用 HTTPS (配置 SSL 证书)
-3. 限制 CORS 来源
-4. 定期备份数据
-
-## 监控
-
-健康检查端点: `GET /health`
-指标端点: `GET /metrics` (Prometheus 格式)
+1. **修改默认 API key**：设置 `EXECUTOR_API_KEY` 和 `API_KEYS` 环境变量
+2. **启用 HTTPS**：使用反向代理（nginx/caddy）或 Helm Ingress 配置 TLS
+3. **限制 CORS**：设置 `CORS_ORIGIN` 为具体域名，不要使用 `*`
+4. **加密敏感数据**：设置 `ENCRYPTION_KEY` 环境变量
+5. **定期备份**：使用 `POST /backup` 端点
+6. **安全扫描**：定期运行 `POST /security/scan`
