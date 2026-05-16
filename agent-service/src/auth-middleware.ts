@@ -56,6 +56,9 @@ function verifyJWT(token: string, secret: string): Record<string, any> | null {
 export function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
   if (!config.enabled) { next(); return; }
 
+  // Web UI static files should load without auth
+  if (req.path === "/" || req.path.startsWith("/assets/")) { next(); return; }
+
   const publicPaths = new Set([
     "/health",
     "/ready",
